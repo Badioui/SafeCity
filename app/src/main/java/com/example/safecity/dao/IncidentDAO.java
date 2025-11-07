@@ -85,12 +85,20 @@ public class IncidentDAO {
         try {
             ContentValues values = new ContentValues();
             values.put("id_utilisateur", incident.getIdUtilisateur());
-            // Allow id_categorie to be null => use putNull if -1
-            if (incident.getIdCategorie() > 0) {
-                values.put("id_categorie", incident.getIdCategorie());
+
+            // --- DEBUT DE LA CORRECTION ---
+            // 1. Récupérer l'objet Long
+            Long idCategorie = incident.getIdCategorie();
+
+            // 2. CORRECTION : Vérifier si l'objet Long est NULL AVANT de le comparer (> 0)
+            if (idCategorie != null && idCategorie > 0) {
+                values.put("id_categorie", idCategorie);
             } else {
+                // Si null ou <= 0 (convention -1), on insère NULL en base
                 values.putNull("id_categorie");
             }
+            // --- FIN DE LA CORRECTION ---
+
             values.put("description", incident.getDescription());
             values.put("photo_url", incident.getPhotoUrl());
             values.put("latitude", incident.getLatitude());
@@ -265,8 +273,10 @@ public class IncidentDAO {
             } else {
                 Log.w(TAG, "updateIncident: statut invalide -> " + incident.getStatut());
             }
-            if (incident.getIdCategorie() > 0) {
-                values.put("id_categorie", incident.getIdCategorie());
+
+            Long idCategorie = incident.getIdCategorie();
+            if (idCategorie != null && idCategorie > 0) {
+                values.put("id_categorie", idCategorie);
             } else {
                 values.putNull("id_categorie");
             }
@@ -385,7 +395,7 @@ public class IncidentDAO {
         if (!cursor.isNull(idxCat)) {
             incident.setIdCategorie(cursor.getLong(idxCat));
         } else {
-            incident.setIdCategorie(-1); // -1 => aucune catégorie
+            incident.setIdCategorie(null); // -1 => aucune catégorie
         }
         // description / photo
         int idxDesc = cursor.getColumnIndexOrThrow("description");

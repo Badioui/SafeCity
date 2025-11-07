@@ -49,8 +49,8 @@ public class Incident {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public long getIdCategorie() { return idCategorie; }
-    public void setIdCategorie(long idCategorie) { this.idCategorie = idCategorie; }
+    public Long getIdCategorie() { return idCategorie; }
+    public void setIdCategorie(Long idCategorie) { this.idCategorie = idCategorie; }
 
     public double getLatitude() { return latitude; }
     public void setLatitude(double latitude) { this.latitude = latitude; }
