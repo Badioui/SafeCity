@@ -4,6 +4,7 @@ package com.example.safecity.model;
  * Modèle représentant une catégorie d’incident.
  * (Vol, Accident, Incendie, etc.)
  * Correspond à la table "categories".
+ *  Auteur : Asmaa
  */
 public class Categorie {
 

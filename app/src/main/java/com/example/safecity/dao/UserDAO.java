@@ -23,7 +23,7 @@ import java.util.List;
  *  - Gestion des rôles
  *  - Intégrité référentielle (id_role FK)
  *
- * Auteur : Développeur 1 (Bloc A)
+ * Auteur : Asmaa
  */
 public class UserDAO {
 

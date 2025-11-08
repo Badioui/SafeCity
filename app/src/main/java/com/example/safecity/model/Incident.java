@@ -3,6 +3,7 @@ package com.example.safecity.model;
 /**
  * Modèle représentant un incident signalé par un citoyen.
  * Correspond à la table "incidents".
+ * Auteur : Asmaa
  */
 public class Incident {
 

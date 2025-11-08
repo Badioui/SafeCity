@@ -3,6 +3,7 @@ package com.example.safecity.model;
 /**
  * Modèle représentant un utilisateur (citoyen, autorité ou admin).
  * Correspond à la table "users".
+ *  Auteur : Asmaa
  */
 public class Utilisateur {
 

@@ -3,6 +3,7 @@ package com.example.safecity.model;
 /**
  * Modèle représentant un rôle utilisateur dans SafeCity.
  * (Admin, Autorité, Citoyen)
+ *  Auteur : Asmaa
  */
 public class Role {
 

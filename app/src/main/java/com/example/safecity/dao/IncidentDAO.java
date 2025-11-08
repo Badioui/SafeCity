@@ -15,13 +15,8 @@ import java.util.List;
  * IncidentDAO
  *
  * Gestion complète des opérations CRUD sur la table "incidents".
- * Améliorations :
- *  - Transactions pour write operations
- *  - Validation des statuts
- *  - Gestion correcte des NULL SQL (id_categorie)
- *  - Recherche par proximité : bounding box + Haversine filtering (précision)
- *
  * Conforme au Cahier des Charges SafeCity.
+ *  Auteur : Asmaa
  */
 public class IncidentDAO {
 
@@ -438,6 +433,97 @@ public class IncidentDAO {
             if (cursor != null) cursor.close();
         }
         return count;
+    }
+
+
+
+// =========================================================
+// STATISTIQUES :
+// =========================================================
+
+    /**
+     * Calcule le nombre d'incidents par statut (Nouveau, En cours, Traité).
+     * @return Map<Statut, Count>
+     */
+    public java.util.Map<String, Integer> countIncidentsByStatut() {
+        ensureDb();
+        java.util.Map<String, Integer> stats = new java.util.LinkedHashMap<>();
+
+        // Requête : SELECT statut, COUNT(*) FROM incidents GROUP BY statut
+        String query = "SELECT statut, COUNT(*) FROM incidents GROUP BY statut";
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            while (cursor != null && cursor.moveToNext()) {
+                String statut = cursor.getString(0);
+                int count = cursor.getInt(1);
+                if (statut != null) {
+                    stats.put(statut, count);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "countIncidentsByStatut exception: " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        // Assurer que les clés standard sont toujours présentes (même avec 0)
+        if (!stats.containsKey(Incident.STATUT_NOUVEAU)) stats.put(Incident.STATUT_NOUVEAU, 0);
+        if (!stats.containsKey(Incident.STATUT_EN_COURS)) stats.put(Incident.STATUT_EN_COURS, 0);
+        if (!stats.containsKey(Incident.STATUT_TRAITE)) stats.put(Incident.STATUT_TRAITE, 0);
+
+        return stats;
+    }
+
+    /**
+     * Calcule le nombre d'incidents par catégorie.
+     * @return Map<NomCategorie, Count>
+     */
+    public java.util.Map<String, Integer> countIncidentsByCategory(Context context) {
+        ensureDb();
+        java.util.Map<String, Integer> stats = new java.util.LinkedHashMap<>();
+
+        // Jointure : incidents (pour le compte) + categories (pour le nom)
+        // GROUP BY id_categorie (pour les statistiques)
+        String query = "SELECT c.nom_categorie, COUNT(i.id_incident) " +
+                "FROM incidents i " +
+                "JOIN categories c ON i.id_categorie = c.id_categorie " +
+                "GROUP BY c.nom_categorie " +
+                "ORDER BY COUNT(i.id_incident) DESC";
+
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            while (cursor != null && cursor.moveToNext()) {
+                String nomCategorie = cursor.getString(0);
+                int count = cursor.getInt(1);
+                stats.put(nomCategorie, count);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "countIncidentsByCategory exception: " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+
+        // Gérer les incidents sans catégorie (id_categorie NULL)
+        // Requête : SELECT COUNT(*) FROM incidents WHERE id_categorie IS NULL
+        String nullQuery = "SELECT COUNT(*) FROM incidents WHERE id_categorie IS NULL";
+        Cursor nullCursor = null;
+        try {
+            nullCursor = db.rawQuery(nullQuery, null);
+            if (nullCursor != null && nullCursor.moveToFirst()) {
+                int nullCount = nullCursor.getInt(0);
+                if (nullCount > 0) {
+                    // Utiliser une clé explicite pour les incidents non classés
+                    stats.put("Non Classé", nullCount);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "count IncidentsByCategory (NULL) exception: " + e.getMessage());
+        } finally {
+            if (nullCursor != null) nullCursor.close();
+        }
+
+        return stats;
     }
 }
 
