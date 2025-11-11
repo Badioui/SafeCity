@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_home"
+        android:icon="@drawable/ic_home"
+        android:title="Accueil" />
+    <item
+        android:id="@+id/nav_map"
+        android:icon="@drawable/ic_map"
+        android:title="Carte" />
+    <item
+        android:id="@+id/nav_create"
+        android:icon="@drawable/ic_add"  android:title="Créer"
+        android:enabled="true" />
+    <item
+        android:id="@+id/nav_activity"
+        android:icon="@drawable/ic_heart"
+        android:title="Activité" />
+    <item
+        android:id="@+id/nav_profile"
+        android:icon="@drawable/ic_profile"
+        android:title="Profil" />
+</menu>

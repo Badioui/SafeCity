@@ -525,5 +525,47 @@ public class IncidentDAO {
 
         return stats;
     }
+
+
+// =========================================================
+// READ : Recherche Textuelle
+// =========================================================
+
+    /**
+     * Recherche des incidents par un mot-clé dans la description.
+     * Utilise l'opérateur LIKE de SQLite pour une recherche partielle insensible à la casse.
+     */
+    public List<Incident> searchIncidentsByKeyword(String keyword) {
+        ensureDb();
+        List<Incident> list = new ArrayList<>();
+        if (keyword == null || keyword.isEmpty()) {
+            return list;
+        }
+
+        // Pour la recherche partielle insensible à la casse, on utilise LIKE
+        // Le '%' permet la correspondance avec n'importe quelle séquence de caractères.
+        String selection = "description LIKE ?";
+        String[] selectionArgs = new String[]{"%" + keyword + "%"};
+
+        Cursor cursor = null;
+        try {
+            cursor = db.query(
+                    "incidents",
+                    null,
+                    selection,
+                    selectionArgs,
+                    null, null,
+                    "date_signalement DESC" // Trier par date récente
+            );
+            while (cursor != null && cursor.moveToNext()) {
+                list.add(cursorToIncident(cursor));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "searchIncidentsByKeyword exception: " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return list;
+    }
 }
 

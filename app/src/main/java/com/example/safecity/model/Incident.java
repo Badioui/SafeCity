@@ -22,7 +22,7 @@ public class Incident {
     private String dateSignalement;  // TEXT (SQLite timestamp)
     private String statut;           // Nouveau / En cours / Traité
     private long idUtilisateur;      // FK vers users(id_utilisateur)
-
+    private String userName;
     // --- Constructeurs ---
     public Incident() {}
 
@@ -67,6 +67,11 @@ public class Incident {
 
     public long getIdUtilisateur() { return idUtilisateur; }
     public void setIdUtilisateur(long idUtilisateur) { this.idUtilisateur = idUtilisateur; }
+
+
+    // AJOUTEZ CES DEUX MÉTHODES :
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
 
     // --- Utilitaires ---
     public boolean isTraite() {
