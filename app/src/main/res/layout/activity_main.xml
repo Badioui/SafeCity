@@ -49,6 +49,9 @@
         android:id="@+id/nav_host_fragment"
         android:layout_width="0dp"
         android:layout_height="0dp"
+
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+
         app:layout_constraintBottom_toTopOf="@id/bottom_nav_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

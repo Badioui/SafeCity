@@ -45,5 +45,5 @@ dependencies {
     // ✅ NÉCESSAIRE POUR LA CARTE : Google Maps SDK
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     // ✅ NÉCESSAIRE POUR LE GPS : Google Location Services (pour Tâche C3/B2)
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }
