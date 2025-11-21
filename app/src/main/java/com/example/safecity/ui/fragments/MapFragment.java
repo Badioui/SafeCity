@@ -1,5 +1,6 @@
 package com.example.safecity.ui.fragments;
 
+import android.location.Location;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,8 +14,8 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
-
 import com.example.safecity.R;
+import com.example.safecity.utils.PermissionManager; // Import B2
 
 // 💡 Le Fragment implémente l'interface de callback.
 public class MapFragment extends Fragment implements OnMapReadyCallback {
@@ -31,39 +32,54 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        // 1. Récupérer l'instance du SupportMapFragment (enfant).
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map_fragment_view);
 
-        // 2. Initialisation asynchrone de la carte.
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
     }
 
-    /**
-     * Appelée lorsque la carte est prête à être utilisée (objet GoogleMap disponible).
-     */
     @Override
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
 
-        // --- Configuration Initiale de la Carte ---
-
         // Définir une position par défaut (Ex: Paris)
         LatLng defaultLocation = new LatLng(48.8566, 2.3522);
-
-        // Déplacer la caméra vers cette position avec un niveau de zoom de 12
         this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultLocation, 12));
-
-        // Optionnel: Activer les contrôles de zoom intégrés.
         this.googleMap.getUiSettings().setZoomControlsEnabled(true);
 
-        // TO-DO B3: C'est ici que nous chargerons les marqueurs des incidents.
+        // --- Logique B2 : Vérifier la permission au chargement ---
+        enableUserLocation();
+
+        // TO-DO B3: Charger les marqueurs des incidents.
     }
 
-    // Vous pouvez ajouter ici la gestion de l'activation/désactivation de la position de l'utilisateur (B2)
-    // une fois que la carte (googleMap) est disponible et que les permissions sont accordées.
+    /**
+     * Tâche B2: Active le point bleu de position de l'utilisateur.
+     * Cette méthode est appelée après onMapReady et après l'accord des permissions.
+     */
+    public void enableUserLocation() {
+        // Vérifie si la carte est initialisée ET si nous avons la permission FINE_LOCATION
+        if (googleMap != null && PermissionManager.checkAllPermissions(requireContext())) {
+            try {
+                // Active le bouton et la couche de localisation
+                googleMap.setMyLocationEnabled(true);
+                googleMap.getUiSettings().setMyLocationButtonEnabled(true);
+            } catch (SecurityException e) {
+                // Le catch est théoriquement inutile grâce à la vérification de PermissionManager
+                e.printStackTrace();
+            }
+        }
+    }
 
-    // ... code restant ...
+    /**
+     * Centrage de la carte sur une position donnée (optionnel pour B2/C2)
+     */
+    public void centerMapOnLocation(Location location) {
+        if (googleMap != null) {
+            LatLng userLatLng = new LatLng(location.getLatitude(), location.getLongitude());
+            googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 15));
+        }
+    }
 }

@@ -1,11 +1,3 @@
-/**
- * ATTENTION: FICHIER DE TEST / ARTEFACT D'INTÉGRATION EN COURS (Tâche C4/C5)
- * ⚠️ Ce code d'adaptateur ne gère pas encore tous les cas d'usage finaux :
- * 1. La logique des boutons Modifier/Supprimer (C5) est vide.
- * 2. La gestion de la couleur de statut est simplifiée pour la compilation.
- * 3. Le chargement d'images n'est pas implémenté.
- * * Ce fichier est destiné à être complété pour l'affichage final des données.
- */
 package com.example.safecity.ui.adapters;
 
 import android.content.Context;
@@ -15,119 +7,118 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.bitmap.CenterCrop;
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.example.safecity.R;
-import com.example.safecity.model.Incident; // Assurez-vous que l'import est correct
+import com.example.safecity.model.Incident;
+
 import java.util.List;
 
 public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.IncidentViewHolder> {
 
-    // Retirer 'final' pour permettre la mise à jour via updateList()
+    private Context context;
     private List<Incident> incidentList;
-    private final OnIncidentActionListener listener;
+    private OnIncidentActionListener actionListener; // Le fameux Listener
 
-    // Interface de Callback pour gérer toutes les actions sur un incident (C4, C5)
+    // ✅ 1. DÉFINITION DE L'INTERFACE (Indispensable pour MyIncidentsFragment)
     public interface OnIncidentActionListener {
         void onMapClick(Incident incident);
         void onEditClick(Incident incident);
         void onDeleteClick(Incident incident);
     }
 
-    public IncidentAdapter(List<Incident> incidentList, OnIncidentActionListener listener) {
+    // ✅ 2. CONSTRUCTEUR COMPLET (Pour MyIncidentsFragment - avec actions)
+    public IncidentAdapter(Context context, List<Incident> incidentList, OnIncidentActionListener listener) {
+        this.context = context;
         this.incidentList = incidentList;
-        this.listener = listener;
+        this.actionListener = listener;
+    }
+
+    // ✅ 3. CONSTRUCTEUR SIMPLE (Pour HomeFragment - sans actions)
+    public IncidentAdapter(Context context, List<Incident> incidentList) {
+        this(context, incidentList, null); // Appelle l'autre constructeur avec null
     }
 
     @NonNull
     @Override
     public IncidentViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                // CORRECTION: Utiliser le layout unique
-                .inflate(R.layout.item_signalement, parent, false);
+        View view = LayoutInflater.from(context).inflate(R.layout.item_signalement, parent, false);
         return new IncidentViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull IncidentViewHolder holder, int position) {
         Incident incident = incidentList.get(position);
-        Context context = holder.itemView.getContext();
 
-        // 1. Liaison des données
-        // Assurez-vous que Incident.java a une méthode getUserName() ou utilisez la logique suivante
-        String usernameDisplay = "Citoyen #" + incident.getIdUtilisateur();
-
-        holder.tvUsername.setText(usernameDisplay);
+        // Textes
         holder.tvDescription.setText(incident.getDescription());
-        holder.tvStatus.setText(incident.getStatut().toUpperCase());
+        holder.tvStatus.setText(incident.getStatut());
+        holder.tvCategory.setText("Catégorie " + incident.getIdCategorie());
+        holder.tvUsername.setText("Utilisateur #" + incident.getIdUtilisateur());
 
-        // 2. Gestion des actions (Map, Edit, Delete)
+        // Image
+        if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty()) {
+            holder.imgPhoto.setVisibility(View.VISIBLE);
+            Glide.with(context)
+                    .load(incident.getPhotoUrl())
+                    .transform(new CenterCrop(), new RoundedCorners(16))
+                    .placeholder(R.drawable.ic_incident_placeholder)
+                    .into(holder.imgPhoto);
+        } else {
+            holder.imgPhoto.setImageResource(R.drawable.ic_incident_placeholder);
+        }
 
-        holder.btnOpenMap.setOnClickListener(v -> {
-            if (listener != null) listener.onMapClick(incident);
-        });
+        // Gestion de l'affichage des boutons (Selon si on a un listener ou pas)
+        if (actionListener != null) {
+            // Mode "Mes Incidents" : On active les boutons
+            holder.btnEdit.setVisibility(View.VISIBLE);
+            holder.btnDelete.setVisibility(View.VISIBLE);
 
-        holder.btnEdit.setOnClickListener(v -> {
-            if (listener != null) listener.onEditClick(incident);
-        });
+            holder.btnMap.setOnClickListener(v -> actionListener.onMapClick(incident));
+            holder.btnEdit.setOnClickListener(v -> actionListener.onEditClick(incident));
+            holder.btnDelete.setOnClickListener(v -> actionListener.onDeleteClick(incident));
+        } else {
+            // Mode "Home" : On cache les boutons d'édition (on garde juste la carte)
+            holder.btnEdit.setVisibility(View.GONE);
+            holder.btnDelete.setVisibility(View.GONE);
 
-        holder.btnDelete.setOnClickListener(v -> {
-            if (listener != null) listener.onDeleteClick(incident);
-        });
-
-        // 3. Gestion de la couleur de statut (Version compilable)
-        updateStatusColorCompilable(holder.tvStatus, incident.getStatut(), context);
+            // Optionnel : Bouton carte actif même dans Home
+            holder.btnMap.setOnClickListener(v -> {
+                // Logique simple ou vide
+            });
+        }
     }
 
     @Override
     public int getItemCount() {
-        return incidentList.size();
+        return incidentList != null ? incidentList.size() : 0;
     }
 
-    public void updateList(List<Incident> newList) {
-        // CORRECTION: Assignation de la nouvelle liste
+    // Méthode unique pour mettre à jour la liste (utilisée partout)
+    public void updateData(List<Incident> newList) {
         this.incidentList = newList;
         notifyDataSetChanged();
     }
 
-    // Fonction de statut simplifiée pour la compilation (utilise R.drawable.status_new_bg)
-    private void updateStatusColorCompilable(TextView statusView, String statut, Context context) {
-        if (statut.equals(Incident.STATUT_NOUVEAU)) {
-            // Utilise le drawable NOUVEAU (qui devrait exister)
-            statusView.setBackgroundResource(R.drawable.status_new_bg);
-            statusView.setTextColor(ContextCompat.getColor(context, R.color.white));
-        } else {
-            // Utilise un background générique pour éviter les erreurs des drawables manquants
-            statusView.setBackgroundColor(ContextCompat.getColor(context, R.color.colorSecondary));
-            statusView.setTextColor(ContextCompat.getColor(context, R.color.white));
-        }
-        // NOTE: Les autres statuts (EN COURS, TRAITÉ) doivent être gérés ici lorsque les drawables sont créés.
-    }
-
-    // CLASSE VIEWHOLDER CORRIGÉE
     public static class IncidentViewHolder extends RecyclerView.ViewHolder {
-        public final TextView tvUsername;
-        public final TextView tvCategoryDate;
-        public final TextView tvStatus;
-        public final ImageView imgIncidentPhoto;
-        public final TextView tvDescription;
-        public final ImageButton btnOpenMap;
-        public final ImageButton btnEdit;
-        public final ImageButton btnDelete;
+        TextView tvDescription, tvCategory, tvStatus, tvUsername;
+        ImageView imgPhoto;
+        ImageButton btnMap, btnEdit, btnDelete;
 
         public IncidentViewHolder(@NonNull View itemView) {
             super(itemView);
-            // Liaison des IDs de item_signalement.xml
-            tvUsername = itemView.findViewById(R.id.tv_username);
-            tvCategoryDate = itemView.findViewById(R.id.tv_category_date);
-            tvStatus = itemView.findViewById(R.id.tv_status);
-            imgIncidentPhoto = itemView.findViewById(R.id.img_incident_photo);
             tvDescription = itemView.findViewById(R.id.tv_description);
+            tvCategory = itemView.findViewById(R.id.tv_category_date);
+            tvStatus = itemView.findViewById(R.id.tv_status);
+            tvUsername = itemView.findViewById(R.id.tv_username); // Assurez-vous d'avoir cet ID dans le XML
+            imgPhoto = itemView.findViewById(R.id.img_incident_photo);
 
-            // Boutons d'action
-            btnOpenMap = itemView.findViewById(R.id.btn_open_map);
+            btnMap = itemView.findViewById(R.id.btn_open_map);
             btnEdit = itemView.findViewById(R.id.btn_edit_incident);
             btnDelete = itemView.findViewById(R.id.btn_delete_incident);
         }

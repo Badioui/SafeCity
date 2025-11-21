@@ -1,23 +1,11 @@
-/**
- * ATTENTION: FICHIER DE TEST / ARTEFACT D'INTÉGRATION TEMPORAIRE
- * * ⚠️ Ce fichier (MyIncidentsFragment.java) NE REPRÉSENTE PAS la version finale
- * et Complète de la tâche C4.
- * * Ce code a été créé et modifié UNIQUEMENT dans le but de résoudre les
- * problèmes de compilation (erreurs d'import, IDs manquants,
- * implémentation d'interfaces abstraites) afin de lancer l'application (Tâche C1).
- * * Il manque :
- * 1. La gestion réelle du rôle pour les boutons Modifier/Supprimer (C5).
- * 2. La gestion du passage des coordonnées à la Map (B1/B3).
- * 3. Le traitement asynchrone pour l'appel au DAO (A3).
- * 4. L'affichage des images (Chargement via URL).
- * * Ce fichier doit être révisé et complété avant le rendu final.
- */
 package com.example.safecity.ui.fragments;
 
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -27,20 +15,19 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.safecity.R;
 import com.example.safecity.dao.IncidentDAO;
 import com.example.safecity.model.Incident;
-import com.example.safecity.ui.adapters.IncidentAdapter; // L'adaptateur corrigé
+import com.example.safecity.ui.adapters.IncidentAdapter;
 
 import java.util.List;
 
-// L'implémentation de l'interface est maintenant complète
 public class MyIncidentsFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
     private RecyclerView recyclerView;
     private IncidentDAO incidentDAO;
-    private long currentUserId = 1; // ID utilisateur simulé (A4)
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        // On charge le layout XML qui contient le RecyclerView
         return inflater.inflate(R.layout.fragment_my_incidents, container, false);
     }
 
@@ -48,51 +35,84 @@ public class MyIncidentsFragment extends Fragment implements IncidentAdapter.OnI
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Initialisation de la liste
         recyclerView = view.findViewById(R.id.incidents_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
+        // Chargement des données
+        loadIncidents();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // On recharge la liste quand on revient sur l'écran (au cas où il y a eu des ajouts)
         loadIncidents();
     }
 
     private void loadIncidents() {
+        // Sécurité pour éviter les crashs si le fragment n'est pas attaché
         if (getContext() == null) return;
 
-        incidentDAO = new IncidentDAO(getContext());
-        incidentDAO.open();
+        new Thread(() -> {
+            incidentDAO = new IncidentDAO(getContext());
+            incidentDAO.open();
 
-        List<Incident> incidents = incidentDAO.getIncidentsByUtilisateur(currentUserId);
+            // Récupération de tous les incidents
+            // Note: Plus tard, vous pourrez filtrer par utilisateur avec : incidentDAO.getIncidentsByUtilisateur(1);
+            List<Incident> incidents = incidentDAO.getAllIncidents();
 
-        incidentDAO.close();
+            incidentDAO.close();
 
-        // Le constructeur prend seulement la liste et le listener (this)
-        IncidentAdapter adapter = new IncidentAdapter(incidents, this);
-        recyclerView.setAdapter(adapter);
+            // Mise à jour de l'interface utilisateur (UI) sur le thread principal
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    // ✅ Création de l'adaptateur avec le contexte, la liste, et le listener (this)
+                    if (incidents != null) {
+                        IncidentAdapter adapter = new IncidentAdapter(getContext(), incidents, this);
+                        recyclerView.setAdapter(adapter);
+                    } else {
+                        Toast.makeText(getContext(), "Aucun incident trouvé.", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }).start();
     }
 
     // =========================================================
-    // IMPLÉMENTATION DES MÉTHODES DE L'INTERFACE OnIncidentActionListener
+    // IMPLÉMENTATION DES ACTIONS (Interface IncidentAdapter)
     // =========================================================
 
-    // 1. Gère le clic sur le bouton Map (CORRECTION du nom de méthode)
     @Override
     public void onMapClick(Incident incident) {
-        // Logique de navigation B1/B3: centrer la carte sur les coordonnées
-        if (incident.getLatitude() != 0.0 || incident.getLongitude() != 0.0) {
-            System.out.println("Naviguer vers la carte aux coordonnées: " + incident.getLatitude() + ", " + incident.getLongitude());
-        }
+        // Action quand on clique sur le bouton "Carte" d'un item
+        Toast.makeText(getContext(), "Localisation : " + incident.getLatitude() + ", " + incident.getLongitude(), Toast.LENGTH_SHORT).show();
+        // TODO: Plus tard, rediriger vers MapFragment avec ces coordonnées
     }
 
-    // 2. Gère le clic sur le bouton Edit (MÉTHODE MANQUANTE - Tâche C5)
     @Override
     public void onEditClick(Incident incident) {
-        // Logique pour ouvrir l'écran de modification de l'incident
-        System.out.println("Ouvrir la modification pour l'incident ID: " + incident.getId());
+        // Action quand on clique sur le bouton "Modifier"
+        Toast.makeText(getContext(), "Modification à venir pour l'ID : " + incident.getId(), Toast.LENGTH_SHORT).show();
+        // TODO: Ouvrir SignalementFragment en mode édition
     }
 
-    // 3. Gère le clic sur le bouton Delete (MÉTHODE MANQUANTE - Tâche C5/D4)
     @Override
     public void onDeleteClick(Incident incident) {
-        // Logique pour demander confirmation de suppression et appeler DAO A3
-        System.out.println("Confirmation de suppression pour l'incident ID: " + incident.getId());
+        // Action quand on clique sur "Supprimer" -> Suppression réelle en BDD
+        new Thread(() -> {
+            incidentDAO = new IncidentDAO(getContext());
+            incidentDAO.open();
+            incidentDAO.deleteIncident(incident.getId());
+            incidentDAO.close();
+
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    Toast.makeText(getContext(), "Incident supprimé !", Toast.LENGTH_SHORT).show();
+                    // Recharger la liste pour faire disparaître l'élément supprimé
+                    loadIncidents();
+                });
+            }
+        }).start();
     }
 }

@@ -81,12 +81,11 @@ public class IncidentDAO {
             ContentValues values = new ContentValues();
             values.put("id_utilisateur", incident.getIdUtilisateur());
 
-            // --- DEBUT DE LA CORRECTION ---
             // 1. Récupérer l'objet Long
             Long idCategorie = incident.getIdCategorie();
 
             // 2. CORRECTION : Vérifier si l'objet Long est NULL AVANT de le comparer (> 0)
-            if (idCategorie != null && idCategorie > 0) {
+            if (idCategorie != null ) {
                 values.put("id_categorie", idCategorie);
             } else {
                 // Si null ou <= 0 (convention -1), on insère NULL en base
@@ -270,7 +269,7 @@ public class IncidentDAO {
             }
 
             Long idCategorie = incident.getIdCategorie();
-            if (idCategorie != null && idCategorie > 0) {
+            if (idCategorie != null ) {
                 values.put("id_categorie", idCategorie);
             } else {
                 values.putNull("id_categorie");
@@ -320,6 +319,7 @@ public class IncidentDAO {
         }
         return rows;
     }
+
 
     // =========================================================
     // FILTRAGE PAR PROXIMITÉ (km) — bounding box + Haversine
