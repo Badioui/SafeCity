@@ -23,6 +23,8 @@ public class Incident {
     private String statut;           // Nouveau / En cours / Traité
     private long idUtilisateur;      // FK vers users(id_utilisateur)
     private String userName;
+    private String nomCategorie;
+    private String nomUtilisateur;
     // --- Constructeurs ---
     public Incident() {}
 
@@ -68,6 +70,11 @@ public class Incident {
     public long getIdUtilisateur() { return idUtilisateur; }
     public void setIdUtilisateur(long idUtilisateur) { this.idUtilisateur = idUtilisateur; }
 
+    public String getNomCategorie() { return nomCategorie; }
+    public void setNomCategorie(String nomCategorie) { this.nomCategorie = nomCategorie; }
+
+    public String getNomUtilisateur() { return nomUtilisateur; }
+    public void setNomUtilisateur(String nomUtilisateur) { this.nomUtilisateur = nomUtilisateur; }
 
     // AJOUTEZ CES DEUX MÉTHODES :
     public String getUserName() { return userName; }

@@ -9,14 +9,14 @@ import android.util.Log;
 import com.example.safecity.model.Incident;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * IncidentDAO
- *
- * Gestion complète des opérations CRUD sur la table "incidents".
- * Conforme au Cahier des Charges SafeCity.
- *  Auteur : Asmaa
+ * * Gestion complète des opérations CRUD sur la table "incidents".
+ * CORRIGÉ : Utilise la table 'users' et gère correctement les alias SQL.
  */
 public class IncidentDAO {
 
@@ -29,7 +29,6 @@ public class IncidentDAO {
         dbHelper = new DatabaseHelper(context);
     }
 
-    // --- Ouvrir / Fermer la base ---
     public void open() {
         if (db == null || !db.isOpen()) {
             db = dbHelper.getWritableDatabase();
@@ -43,14 +42,12 @@ public class IncidentDAO {
         db = null;
     }
 
-    // --- Utility : ensure DB open ---
     private void ensureDb() {
         if (db == null || !db.isOpen()) {
             open();
         }
     }
 
-    // --- Validate statut against allowed constants ---
     private boolean isValidStatut(String statut) {
         if (statut == null) return false;
         return Incident.STATUT_NOUVEAU.equals(statut)
@@ -59,39 +56,29 @@ public class IncidentDAO {
     }
 
     // =========================================================
-    // CREATE : Ajouter un incident (transaction)
+    // CREATE
     // =========================================================
     public long insertIncident(Incident incident) {
         ensureDb();
         long result = -1;
-        if (incident == null) {
-            Log.e(TAG, "insertIncident: incident is null");
-            return -1;
-        }
-        // Validate statut (if not provided, set default)
+        if (incident == null) return -1;
+
         String statut = incident.getStatut();
         if (statut == null || !isValidStatut(statut)) {
             statut = Incident.STATUT_NOUVEAU;
-            incident.setStatut(statut);
         }
 
         db.beginTransaction();
-        Cursor cursor = null;
         try {
             ContentValues values = new ContentValues();
             values.put("id_utilisateur", incident.getIdUtilisateur());
 
-            // 1. Récupérer l'objet Long
-            Long idCategorie = incident.getIdCategorie();
-
-            // 2. CORRECTION : Vérifier si l'objet Long est NULL AVANT de le comparer (> 0)
-            if (idCategorie != null ) {
+            Long idCategorie = incident.getIdCategorie(); // Peut être null (long objet) ou 0 (long primitif)
+            if (idCategorie != null && idCategorie > 0) {
                 values.put("id_categorie", idCategorie);
             } else {
-                // Si null ou <= 0 (convention -1), on insère NULL en base
                 values.putNull("id_categorie");
             }
-            // --- FIN DE LA CORRECTION ---
 
             values.put("description", incident.getDescription());
             values.put("photo_url", incident.getPhotoUrl());
@@ -99,37 +86,91 @@ public class IncidentDAO {
             values.put("longitude", incident.getLongitude());
             values.put("statut", statut);
 
+            if (incident.getDateSignalement() != null) {
+                values.put("date_signalement", incident.getDateSignalement());
+            }
+
             result = db.insert("incidents", null, values);
-            if (result == -1) {
-                Log.e(TAG, "insertIncident: insertion failed");
-            } else {
+            if (result != -1) {
                 db.setTransactionSuccessful();
-                Log.i(TAG, "insertIncident: success id=" + result);
             }
         } catch (Exception e) {
             Log.e(TAG, "insertIncident exception: " + e.getMessage());
         } finally {
             db.endTransaction();
-            if (cursor != null) cursor.close();
         }
         return result;
     }
 
     // =========================================================
-    // READ : Récupérer un incident par son ID
+    // READ : Tous les incidents (FIL D'ACTU)
+    // =========================================================
+    public List<Incident> getAllIncidents() {
+        ensureDb();
+        List<Incident> incidents = new ArrayList<>();
+        Cursor cursor = null;
+        try {
+            // CORRECTION SQL :
+            // 1. Table 'users' au lieu de 'utilisateurs'
+            // 2. Alias 'u.nom AS userName'
+            String query = "SELECT i.*, c.nom_categorie, u.nom AS userName " +
+                    "FROM incidents i " +
+                    "LEFT JOIN categories c ON i.id_categorie = c.id_categorie " +
+                    "LEFT JOIN users u ON i.id_utilisateur = u.id_utilisateur " +
+                    "ORDER BY i.date_signalement DESC";
+
+            cursor = db.rawQuery(query, null);
+
+            while (cursor != null && cursor.moveToNext()) {
+                incidents.add(cursorToIncident(cursor));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "getAllIncidents : " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return incidents;
+    }
+
+    // =========================================================
+    // READ : Filtrage par Utilisateur (PROFIL)
+    // =========================================================
+    public List<Incident> getIncidentsByUtilisateur(long idUtilisateur) {
+        ensureDb();
+        List<Incident> list = new ArrayList<>();
+        Cursor cursor = null;
+        try {
+            // CORRECTION SQL ICI AUSSI : Table users + Alias userName
+            String query = "SELECT i.*, c.nom_categorie, u.nom AS userName " +
+                    "FROM incidents i " +
+                    "LEFT JOIN categories c ON i.id_categorie = c.id_categorie " +
+                    "LEFT JOIN users u ON i.id_utilisateur = u.id_utilisateur " +
+                    "WHERE i.id_utilisateur = ? " +
+                    "ORDER BY i.date_signalement DESC";
+
+            cursor = db.rawQuery(query, new String[]{String.valueOf(idUtilisateur)});
+
+            while (cursor != null && cursor.moveToNext()) {
+                list.add(cursorToIncident(cursor));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "getIncidentsByUtilisateur : " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return list;
+    }
+
+    // =========================================================
+    // READ : Par ID
     // =========================================================
     public Incident getIncidentById(long id) {
         ensureDb();
         Incident incident = null;
         Cursor cursor = null;
         try {
-            cursor = db.query(
-                    "incidents",
-                    null,
-                    "id_incident = ?",
-                    new String[]{String.valueOf(id)},
-                    null, null, null
-            );
+            cursor = db.query("incidents", null, "id_incident = ?",
+                    new String[]{String.valueOf(id)}, null, null, null);
 
             if (cursor != null && cursor.moveToFirst()) {
                 incident = cursorToIncident(cursor);
@@ -143,152 +184,34 @@ public class IncidentDAO {
     }
 
     // =========================================================
-    // READ : Tous les incidents (DESC date)
-    // =========================================================
-    public List<Incident> getAllIncidents() {
-        ensureDb();
-        List<Incident> incidents = new ArrayList<>();
-        Cursor cursor = null;
-        try {
-            cursor = db.query("incidents", null, null, null, null, null, "date_signalement DESC");
-            while (cursor != null && cursor.moveToNext()) {
-                incidents.add(cursorToIncident(cursor));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "getAllIncidents : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return incidents;
-    }
-
-    // =========================================================
-    // READ : Filtrage par statut
-    // =========================================================
-    public List<Incident> getIncidentsByStatut(String statut) {
-        ensureDb();
-        List<Incident> list = new ArrayList<>();
-        if (!isValidStatut(statut)) {
-            Log.w(TAG, "getIncidentsByStatut: statut invalide -> " + statut);
-            return list;
-        }
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    "incidents",
-                    null,
-                    "statut = ?",
-                    new String[]{statut},
-                    null, null,
-                    "date_signalement DESC"
-            );
-            while (cursor != null && cursor.moveToNext()) {
-                list.add(cursorToIncident(cursor));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "getIncidentsByStatut : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return list;
-    }
-
-    // =========================================================
-    // READ : Incidents d’un utilisateur
-    // =========================================================
-    public List<Incident> getIncidentsByUtilisateur(long idUtilisateur) {
-        ensureDb();
-        List<Incident> list = new ArrayList<>();
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    "incidents",
-                    null,
-                    "id_utilisateur = ?",
-                    new String[]{String.valueOf(idUtilisateur)},
-                    null, null,
-                    "date_signalement DESC"
-            );
-            while (cursor != null && cursor.moveToNext()) {
-                list.add(cursorToIncident(cursor));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "getIncidentsByUtilisateur : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return list;
-    }
-
-    // =========================================================
-    // READ : Filtrage par catégorie
-    // =========================================================
-    public List<Incident> getIncidentsByCategorie(long idCategorie) {
-        ensureDb();
-        List<Incident> list = new ArrayList<>();
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    "incidents",
-                    null,
-                    "id_categorie = ?",
-                    new String[]{String.valueOf(idCategorie)},
-                    null, null,
-                    "date_signalement DESC"
-            );
-            while (cursor != null && cursor.moveToNext()) {
-                list.add(cursorToIncident(cursor));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "getIncidentsByCategorie : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return list;
-    }
-
-    // =========================================================
-    // UPDATE : Modifier un incident (transaction)
+    // UPDATE
     // =========================================================
     public int updateIncident(Incident incident) {
         ensureDb();
-        if (incident == null) {
-            Log.e(TAG, "updateIncident: incident is null");
-            return 0;
-        }
         int rows = 0;
+        if (incident == null) return 0;
+
         db.beginTransaction();
         try {
             ContentValues values = new ContentValues();
-            if (incident.getDescription() != null) values.put("description", incident.getDescription());
+            values.put("description", incident.getDescription());
             values.put("photo_url", incident.getPhotoUrl());
-            if (isValidStatut(incident.getStatut())) {
-                values.put("statut", incident.getStatut());
-            } else {
-                Log.w(TAG, "updateIncident: statut invalide -> " + incident.getStatut());
-            }
+            values.put("statut", incident.getStatut());
 
             Long idCategorie = incident.getIdCategorie();
-            if (idCategorie != null ) {
+            if (idCategorie != null && idCategorie > 0) {
                 values.put("id_categorie", idCategorie);
             } else {
                 values.putNull("id_categorie");
             }
+
             values.put("latitude", incident.getLatitude());
             values.put("longitude", incident.getLongitude());
 
-            rows = db.update(
-                    "incidents",
-                    values,
-                    "id_incident = ?",
-                    new String[]{String.valueOf(incident.getId())}
-            );
-            if (rows > 0) {
-                db.setTransactionSuccessful();
-                Log.i(TAG, "updateIncident: rows=" + rows);
-            } else {
-                Log.w(TAG, "updateIncident: aucune ligne mise à jour pour id=" + incident.getId());
-            }
+            rows = db.update("incidents", values, "id_incident = ?",
+                    new String[]{String.valueOf(incident.getId())});
+
+            if (rows > 0) db.setTransactionSuccessful();
         } catch (Exception e) {
             Log.e(TAG, "updateIncident exception: " + e.getMessage());
         } finally {
@@ -298,274 +221,113 @@ public class IncidentDAO {
     }
 
     // =========================================================
-    // DELETE : Supprimer un incident (transaction)
+    // DELETE
     // =========================================================
     public int deleteIncident(long idIncident) {
         ensureDb();
         int rows = 0;
-        db.beginTransaction();
         try {
-            rows = db.delete("incidents", "id_incident = ?", new String[]{String.valueOf(idIncident)});
-            if (rows > 0) {
-                db.setTransactionSuccessful();
-                Log.i(TAG, "deleteIncident: id=" + idIncident + " supprimé");
-            } else {
-                Log.w(TAG, "deleteIncident: id=" + idIncident + " non trouvé");
-            }
+            rows = db.delete("incidents", "id_incident = ?",
+                    new String[]{String.valueOf(idIncident)});
         } catch (Exception e) {
             Log.e(TAG, "deleteIncident exception: " + e.getMessage());
-        } finally {
-            db.endTransaction();
         }
         return rows;
     }
 
-
     // =========================================================
-    // FILTRAGE PAR PROXIMITÉ (km) — bounding box + Haversine
-    // =========================================================
-    public List<Incident> getIncidentsByProximity(double latitude, double longitude, double rayonKm) {
-        ensureDb();
-        List<Incident> list = new ArrayList<>();
-        Cursor cursor = null;
-        try {
-            // 1) bounding box approx: 1 deg latitude ~ 111 km
-            double latDelta = rayonKm / 111.0;
-            double latMin = latitude - latDelta;
-            double latMax = latitude + latDelta;
-
-            // Longitude delta depends on latitude
-            double lonDelta = rayonKm / (111.320 * Math.cos(Math.toRadians(latitude)));
-            double lonMin = longitude - lonDelta;
-            double lonMax = longitude + lonDelta;
-
-            String where = "latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?";
-            String[] args = {
-                    String.valueOf(latMin),
-                    String.valueOf(latMax),
-                    String.valueOf(lonMin),
-                    String.valueOf(lonMax)
-            };
-
-            cursor = db.query("incidents", null, where, args, null, null, "date_signalement DESC");
-            while (cursor != null && cursor.moveToNext()) {
-                Incident inc = cursorToIncident(cursor);
-                // compute exact distance (Haversine)
-                double distanceKm = haversine(latitude, longitude, inc.getLatitude(), inc.getLongitude());
-                if (distanceKm <= rayonKm) {
-                    list.add(inc);
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "getIncidentsByProximity : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return list;
-    }
-
-    // Haversine formula (distance in kilometers)
-    private double haversine(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Radius of earth in KM
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
-
-    // =========================================================
-    // Conversion Cursor -> Incident (gère les NULLs)
+    // CONVERSION CURSOR -> MODEL
     // =========================================================
     private Incident cursorToIncident(Cursor cursor) {
         Incident incident = new Incident();
-        // id
+
+        // --- Champs Standard ---
         incident.setId(cursor.getLong(cursor.getColumnIndexOrThrow("id_incident")));
-        // user
         incident.setIdUtilisateur(cursor.getLong(cursor.getColumnIndexOrThrow("id_utilisateur")));
-        // id_categorie may be NULL
-        int idxCat = cursor.getColumnIndexOrThrow("id_categorie");
-        if (!cursor.isNull(idxCat)) {
+
+        int idxCat = cursor.getColumnIndex("id_categorie");
+        if (idxCat != -1 && !cursor.isNull(idxCat)) {
             incident.setIdCategorie(cursor.getLong(idxCat));
-        } else {
-            incident.setIdCategorie(null); // -1 => aucune catégorie
         }
-        // description / photo
-        int idxDesc = cursor.getColumnIndexOrThrow("description");
-        if (!cursor.isNull(idxDesc)) incident.setDescription(cursor.getString(idxDesc));
-        int idxPhoto = cursor.getColumnIndexOrThrow("photo_url");
-        if (!cursor.isNull(idxPhoto)) incident.setPhotoUrl(cursor.getString(idxPhoto));
-        // lat / lon (default 0 if null)
-        int idxLat = cursor.getColumnIndexOrThrow("latitude");
-        if (!cursor.isNull(idxLat)) incident.setLatitude(cursor.getDouble(idxLat));
-        else incident.setLatitude(0.0);
-        int idxLon = cursor.getColumnIndexOrThrow("longitude");
-        if (!cursor.isNull(idxLon)) incident.setLongitude(cursor.getDouble(idxLon));
-        else incident.setLongitude(0.0);
-        // statut
-        int idxStatut = cursor.getColumnIndexOrThrow("statut");
-        if (!cursor.isNull(idxStatut)) incident.setStatut(cursor.getString(idxStatut));
-        else incident.setStatut(Incident.STATUT_NOUVEAU);
-        // date_signalement (TEXT)
-        int idxDate = cursor.getColumnIndexOrThrow("date_signalement");
-        if (!cursor.isNull(idxDate)) incident.setDateSignalement(cursor.getString(idxDate));
-        else incident.setDateSignalement(null);
+
+        int idxDesc = cursor.getColumnIndex("description");
+        if (idxDesc != -1) incident.setDescription(cursor.getString(idxDesc));
+
+        int idxPhoto = cursor.getColumnIndex("photo_url");
+        if (idxPhoto != -1) incident.setPhotoUrl(cursor.getString(idxPhoto));
+
+        int idxLat = cursor.getColumnIndex("latitude");
+        if (idxLat != -1) incident.setLatitude(cursor.getDouble(idxLat));
+
+        int idxLon = cursor.getColumnIndex("longitude");
+        if (idxLon != -1) incident.setLongitude(cursor.getDouble(idxLon));
+
+        int idxStatut = cursor.getColumnIndex("statut");
+        if (idxStatut != -1) incident.setStatut(cursor.getString(idxStatut));
+
+        int idxDate = cursor.getColumnIndex("date_signalement");
+        if (idxDate != -1) incident.setDateSignalement(cursor.getString(idxDate));
+
+        // --- Champs JOINTS (Catégorie et User) ---
+
+        // 1. Nom Catégorie
+        int idxNomCat = cursor.getColumnIndex("nom_categorie");
+        if (idxNomCat != -1 && !cursor.isNull(idxNomCat)) {
+            incident.setNomCategorie(cursor.getString(idxNomCat));
+        }
+
+        // 2. Nom Utilisateur (Via l'alias 'userName' défini dans la requête)
+        int idxUserName = cursor.getColumnIndex("userName");
+        if (idxUserName != -1 && !cursor.isNull(idxUserName)) {
+            incident.setUserName(cursor.getString(idxUserName));
+        } else {
+            // Fallback si l'alias n'est pas trouvé (ex: getIncidentById sans join)
+            // On pourrait laisser null ou mettre "Utilisateur Inconnu" par défaut dans l'adaptateur
+        }
+
         return incident;
     }
 
     // =========================================================
-    // Utilitaire : compte d'incidents (utile pour tests)
+    // STATISTIQUES
     // =========================================================
-    public long countIncidents() {
+
+    public Map<String, Integer> countIncidentsByStatut() {
         ensureDb();
-        long count = 0;
-        Cursor cursor = null;
-        try {
-            cursor = db.rawQuery("SELECT COUNT(*) FROM incidents", null);
-            if (cursor != null && cursor.moveToFirst()) {
-                count = cursor.getLong(0);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "countIncidents : " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return count;
-    }
-
-
-
-// =========================================================
-// STATISTIQUES :
-// =========================================================
-
-    /**
-     * Calcule le nombre d'incidents par statut (Nouveau, En cours, Traité).
-     * @return Map<Statut, Count>
-     */
-    public java.util.Map<String, Integer> countIncidentsByStatut() {
-        ensureDb();
-        java.util.Map<String, Integer> stats = new java.util.LinkedHashMap<>();
-
-        // Requête : SELECT statut, COUNT(*) FROM incidents GROUP BY statut
+        Map<String, Integer> stats = new LinkedHashMap<>();
         String query = "SELECT statut, COUNT(*) FROM incidents GROUP BY statut";
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(query, null);
             while (cursor != null && cursor.moveToNext()) {
-                String statut = cursor.getString(0);
-                int count = cursor.getInt(1);
-                if (statut != null) {
-                    stats.put(statut, count);
-                }
+                stats.put(cursor.getString(0), cursor.getInt(1));
             }
-        } catch (Exception e) {
-            Log.e(TAG, "countIncidentsByStatut exception: " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        // Assurer que les clés standard sont toujours présentes (même avec 0)
+        } catch (Exception e) { e.printStackTrace(); }
+        finally { if (cursor != null) cursor.close(); }
+
         if (!stats.containsKey(Incident.STATUT_NOUVEAU)) stats.put(Incident.STATUT_NOUVEAU, 0);
         if (!stats.containsKey(Incident.STATUT_EN_COURS)) stats.put(Incident.STATUT_EN_COURS, 0);
         if (!stats.containsKey(Incident.STATUT_TRAITE)) stats.put(Incident.STATUT_TRAITE, 0);
-
         return stats;
     }
 
-    /**
-     * Calcule le nombre d'incidents par catégorie.
-     * @return Map<NomCategorie, Count>
-     */
-    public java.util.Map<String, Integer> countIncidentsByCategory(Context context) {
+    public Map<String, Integer> countIncidentsByCategory(Context context) {
         ensureDb();
-        java.util.Map<String, Integer> stats = new java.util.LinkedHashMap<>();
-
-        // Jointure : incidents (pour le compte) + categories (pour le nom)
-        // GROUP BY id_categorie (pour les statistiques)
+        Map<String, Integer> stats = new LinkedHashMap<>();
         String query = "SELECT c.nom_categorie, COUNT(i.id_incident) " +
                 "FROM incidents i " +
                 "JOIN categories c ON i.id_categorie = c.id_categorie " +
-                "GROUP BY c.nom_categorie " +
-                "ORDER BY COUNT(i.id_incident) DESC";
+                "GROUP BY c.nom_categorie";
 
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(query, null);
             while (cursor != null && cursor.moveToNext()) {
-                String nomCategorie = cursor.getString(0);
-                int count = cursor.getInt(1);
-                stats.put(nomCategorie, count);
+                stats.put(cursor.getString(0), cursor.getInt(1));
             }
-        } catch (Exception e) {
-            Log.e(TAG, "countIncidentsByCategory exception: " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-
-        // Gérer les incidents sans catégorie (id_categorie NULL)
-        // Requête : SELECT COUNT(*) FROM incidents WHERE id_categorie IS NULL
-        String nullQuery = "SELECT COUNT(*) FROM incidents WHERE id_categorie IS NULL";
-        Cursor nullCursor = null;
-        try {
-            nullCursor = db.rawQuery(nullQuery, null);
-            if (nullCursor != null && nullCursor.moveToFirst()) {
-                int nullCount = nullCursor.getInt(0);
-                if (nullCount > 0) {
-                    // Utiliser une clé explicite pour les incidents non classés
-                    stats.put("Non Classé", nullCount);
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "count IncidentsByCategory (NULL) exception: " + e.getMessage());
-        } finally {
-            if (nullCursor != null) nullCursor.close();
-        }
-
+        } catch (Exception e) { e.printStackTrace(); }
+        finally { if (cursor != null) cursor.close(); }
         return stats;
-    }
-
-
-// =========================================================
-// READ : Recherche Textuelle
-// =========================================================
-
-    /**
-     * Recherche des incidents par un mot-clé dans la description.
-     * Utilise l'opérateur LIKE de SQLite pour une recherche partielle insensible à la casse.
-     */
-    public List<Incident> searchIncidentsByKeyword(String keyword) {
-        ensureDb();
-        List<Incident> list = new ArrayList<>();
-        if (keyword == null || keyword.isEmpty()) {
-            return list;
-        }
-
-        // Pour la recherche partielle insensible à la casse, on utilise LIKE
-        // Le '%' permet la correspondance avec n'importe quelle séquence de caractères.
-        String selection = "description LIKE ?";
-        String[] selectionArgs = new String[]{"%" + keyword + "%"};
-
-        Cursor cursor = null;
-        try {
-            cursor = db.query(
-                    "incidents",
-                    null,
-                    selection,
-                    selectionArgs,
-                    null, null,
-                    "date_signalement DESC" // Trier par date récente
-            );
-            while (cursor != null && cursor.moveToNext()) {
-                list.add(cursorToIncident(cursor));
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "searchIncidentsByKeyword exception: " + e.getMessage());
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return list;
     }
 }
 

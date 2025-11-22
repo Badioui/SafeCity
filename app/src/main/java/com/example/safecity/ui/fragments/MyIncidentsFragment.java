@@ -16,6 +16,8 @@ import com.example.safecity.R;
 import com.example.safecity.dao.IncidentDAO;
 import com.example.safecity.model.Incident;
 import com.example.safecity.ui.adapters.IncidentAdapter;
+import com.example.safecity.utils.AppExecutors;
+import com.example.safecity.utils.AuthManager;
 
 import java.util.List;
 
@@ -27,7 +29,6 @@ public class MyIncidentsFragment extends Fragment implements IncidentAdapter.OnI
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // On charge le layout XML qui contient le RecyclerView
         return inflater.inflate(R.layout.fragment_my_incidents, container, false);
     }
 
@@ -35,84 +36,78 @@ public class MyIncidentsFragment extends Fragment implements IncidentAdapter.OnI
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        // Initialisation de la liste
         recyclerView = view.findViewById(R.id.incidents_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // Chargement des données
         loadIncidents();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // On recharge la liste quand on revient sur l'écran (au cas où il y a eu des ajouts)
         loadIncidents();
     }
 
+    // =========================================================
+    // A. CHARGEMENT DES INCIDENTS (Avec AppExecutors)
+    // =========================================================
     private void loadIncidents() {
-        // Sécurité pour éviter les crashs si le fragment n'est pas attaché
-        if (getContext() == null) return;
+        long currentUserId = AuthManager.getCurrentUserId(getContext());
+        if (currentUserId == -1) return;
 
-        new Thread(() -> {
+        AppExecutors.getInstance().diskIO().execute(() -> {
             incidentDAO = new IncidentDAO(getContext());
             incidentDAO.open();
-
-            // Récupération de tous les incidents
-            // Note: Plus tard, vous pourrez filtrer par utilisateur avec : incidentDAO.getIncidentsByUtilisateur(1);
-            List<Incident> incidents = incidentDAO.getAllIncidents();
-
+            List<Incident> incidents = incidentDAO.getIncidentsByUtilisateur(currentUserId);
             incidentDAO.close();
 
-            // Mise à jour de l'interface utilisateur (UI) sur le thread principal
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    // ✅ Création de l'adaptateur avec le contexte, la liste, et le listener (this)
-                    if (incidents != null) {
+            AppExecutors.getInstance().mainThread().execute(() -> {
+                if (isAdded() && getActivity() != null) {
+                    if (incidents != null && !incidents.isEmpty()) {
                         IncidentAdapter adapter = new IncidentAdapter(getContext(), incidents, this);
                         recyclerView.setAdapter(adapter);
                     } else {
-                        Toast.makeText(getContext(), "Aucun incident trouvé.", Toast.LENGTH_SHORT).show();
+                        recyclerView.setAdapter(null);
+                        // Optionnel : Afficher un texte "Aucun incident"
                     }
-                });
-            }
-        }).start();
+                }
+            });
+        });
     }
 
     // =========================================================
-    // IMPLÉMENTATION DES ACTIONS (Interface IncidentAdapter)
+    // IMPLÉMENTATION DES ACTIONS
     // =========================================================
 
     @Override
     public void onMapClick(Incident incident) {
-        // Action quand on clique sur le bouton "Carte" d'un item
         Toast.makeText(getContext(), "Localisation : " + incident.getLatitude() + ", " + incident.getLongitude(), Toast.LENGTH_SHORT).show();
-        // TODO: Plus tard, rediriger vers MapFragment avec ces coordonnées
+        // TODO: Redirection vers la Map
     }
 
     @Override
     public void onEditClick(Incident incident) {
-        // Action quand on clique sur le bouton "Modifier"
         Toast.makeText(getContext(), "Modification à venir pour l'ID : " + incident.getId(), Toast.LENGTH_SHORT).show();
-        // TODO: Ouvrir SignalementFragment en mode édition
     }
 
+    // =========================================================
+    // B. SUPPRESSION (Avec AppExecutors)
+    // =========================================================
     @Override
     public void onDeleteClick(Incident incident) {
-        // Action quand on clique sur "Supprimer" -> Suppression réelle en BDD
-        new Thread(() -> {
+        AppExecutors.getInstance().diskIO().execute(() -> {
+            // On s'assure que le DAO est instancié pour ce thread
             incidentDAO = new IncidentDAO(getContext());
             incidentDAO.open();
             incidentDAO.deleteIncident(incident.getId());
             incidentDAO.close();
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
+            AppExecutors.getInstance().mainThread().execute(() -> {
+                if (isAdded() && getActivity() != null) {
                     Toast.makeText(getContext(), "Incident supprimé !", Toast.LENGTH_SHORT).show();
-                    // Recharger la liste pour faire disparaître l'élément supprimé
-                    loadIncidents();
-                });
-            }
-        }).start();
+                    loadIncidents(); // Recharger la liste
+                }
+            });
+        });
     }
 }

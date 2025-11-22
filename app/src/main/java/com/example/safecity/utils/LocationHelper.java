@@ -37,7 +37,8 @@ public class LocationHelper {
     @SuppressLint("MissingPermission")
     public void startLocationUpdates(LocationListener listener) {
         // Vérification des permissions via le contexte de l'application
-        if (!PermissionManager.checkAllPermissions(this.context)) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             listener.onLocationError("Permission de localisation manquante.");
             return;
         }

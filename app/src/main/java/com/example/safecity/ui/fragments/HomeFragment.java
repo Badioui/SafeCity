@@ -15,7 +15,7 @@ import com.example.safecity.R;
 import com.example.safecity.dao.IncidentDAO;
 import com.example.safecity.model.Incident;
 import com.example.safecity.ui.adapters.IncidentAdapter;
-
+import com.example.safecity.utils.AppExecutors;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,24 +57,31 @@ public class HomeFragment extends Fragment {
     }
 
     private void loadData() {
-        new Thread(() -> {
-            incidentDAO.open();
-            // On récupère TOUS les signalements
-            List<Incident> incidents = incidentDAO.getAllIncidents();
-            incidentDAO.close();
+        com.example.safecity.utils.AppExecutors.getInstance().diskIO().execute(() -> {
+            try {
+                incidentDAO.open();
+                List<Incident> incidents = incidentDAO.getAllIncidents();
+                incidentDAO.close();
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    if (incidents != null && !incidents.isEmpty()) {
-                        adapter.updateData(incidents);
-                        tvEmptyState.setVisibility(View.GONE);
-                        recyclerView.setVisibility(View.VISIBLE);
-                    } else {
-                        tvEmptyState.setVisibility(View.VISIBLE);
-                        recyclerView.setVisibility(View.GONE);
+                // DEBUG : Afficher dans les logs le nombre d'incidents trouvés
+                android.util.Log.d("DEBUG_HOME", "Nombre d'incidents trouvés : " + (incidents != null ? incidents.size() : "NULL"));
+
+                com.example.safecity.utils.AppExecutors.getInstance().mainThread().execute(() -> {
+                    if (isAdded() && getActivity() != null) {
+                        if (incidents != null && !incidents.isEmpty()) {
+                            adapter.updateData(incidents);
+                            tvEmptyState.setVisibility(View.GONE);
+                            recyclerView.setVisibility(View.VISIBLE);
+                        } else {
+                            tvEmptyState.setText("Aucun incident trouvé en base de données."); // Message plus précis
+                            tvEmptyState.setVisibility(View.VISIBLE);
+                            recyclerView.setVisibility(View.GONE);
+                        }
                     }
                 });
+            } catch (Exception e) {
+                e.printStackTrace(); // Afficher l'erreur dans le Logcat
             }
-        }).start();
+        });
     }
 }

@@ -4,8 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
@@ -17,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Spinner;
@@ -36,6 +35,7 @@ import com.example.safecity.dao.IncidentDAO;
 import com.example.safecity.dao.ReferenceDAO;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
+import com.example.safecity.utils.AppExecutors;
 import com.example.safecity.utils.AuthManager;
 import com.example.safecity.utils.ImageUtils;
 import com.example.safecity.utils.LocationHelper;
@@ -50,38 +50,38 @@ import java.util.Locale;
 
 public class SignalementFragment extends Fragment implements LocationHelper.LocationListener {
 
-    // Clé pour passer l'argument
+    // Clé pour passer l'argument (ID de l'incident à modifier)
     private static final String ARG_INCIDENT_ID = "arg_incident_id";
 
-    // Constantes
+    // Constantes pour les permissions et intents
     private static final int REQUEST_IMAGE_CAPTURE = 1;
     private static final int REQUEST_GALLERY_PICK = 2;
     private static final int PERM_CODE_CAMERA = 100;
     private static final int PERM_CODE_LOCATION = 101;
     private static final int PERM_CODE_GALLERY = 102;
 
-    // UI
+    // UI Components
     private TextInputEditText etDescription;
     private Spinner spinnerType;
     private Button btnSubmit;
     private ImageButton btnCapturePhoto;
     private ImageView imgPhotoPreview;
     private TextView tvGpsLocation;
-    private TextView tvHeader; // Pour changer le titre
+    private TextView tvHeader;
+    private CheckBox cbNoGps;
 
-    // Data
+    // Data & Logic
     private IncidentDAO incidentDAO;
     private ReferenceDAO referenceDAO;
     private LocationHelper locationHelper;
     private Location lastKnownLocation;
-    private String currentPhotoPath;
-    private String finalPhotoPath;
+    private String currentPhotoPath; // Chemin temporaire (caméra)
+    private String finalPhotoPath;   // Chemin final à sauvegarder en BDD
 
-    // Mode Édition
-    private long editingIncidentId = -1; // -1 signifie mode création
+    // Mode Édition variables
+    private long editingIncidentId = -1; // -1 signifie "Mode Création"
     private Incident incidentToEdit;
 
-    // Méthode statique pour créer le fragment avec un ID (facilite l'appel)
     public static SignalementFragment newInstance(long incidentId) {
         SignalementFragment fragment = new SignalementFragment();
         Bundle args = new Bundle();
@@ -100,7 +100,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        // Init UI
+        // 1. Initialisation des vues
         etDescription = view.findViewById(R.id.et_description);
         spinnerType = view.findViewById(R.id.spinner_type_incident);
         btnSubmit = view.findViewById(R.id.btn_submit_incident);
@@ -108,38 +108,52 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         imgPhotoPreview = view.findViewById(R.id.img_photo_preview);
         tvGpsLocation = view.findViewById(R.id.tv_gps_location);
         tvHeader = view.findViewById(R.id.tv_header);
+        cbNoGps = view.findViewById(R.id.cb_no_gps);
 
+        // 2. Initialisation des DAO
         incidentDAO = new IncidentDAO(getContext());
         referenceDAO = new ReferenceDAO(getContext());
 
-        // Vérifier si on est en mode édition (argument passé ?)
+        // 3. Vérifier si on est en mode édition
         if (getArguments() != null) {
             editingIncidentId = getArguments().getLong(ARG_INCIDENT_ID, -1);
         }
 
-        // Charger les catégories puis (si édition) pré-remplir
+        // 4. Charger les catégories et initialiser l'UI
         loadCategoriesAndInit();
 
+        // 5. Listeners
         btnCapturePhoto.setOnClickListener(v -> showImageSourceDialog());
-        btnSubmit.setOnClickListener(v -> saveIncident()); // Méthode unifiée save/update
+        btnSubmit.setOnClickListener(v -> saveIncident());
+
+        // Listener pour la CheckBox GPS
+        cbNoGps.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // L'utilisateur ne veut pas de GPS
+                if (locationHelper != null) locationHelper.stopLocationUpdates();
+                lastKnownLocation = null; // On vide la position
+                tvGpsLocation.setText("Aucune position précise (Ville/Pays uniquement)");
+            } else {
+                // L'utilisateur réactive le GPS
+                checkLocationPermissionAndStart();
+            }
+        });
     }
 
     private void loadCategoriesAndInit() {
-        new Thread(() -> {
+        AppExecutors.getInstance().diskIO().execute(() -> {
             referenceDAO.open();
             List<Categorie> cats = referenceDAO.getAllCategories();
             referenceDAO.close();
 
-            // Si mode édition, charger l'incident
             if (editingIncidentId != -1) {
                 incidentDAO.open();
-                incidentToEdit = incidentDAO.getIncidentById(editingIncidentId); // Supposons que cette méthode existe ou getAll et filtrer
+                incidentToEdit = incidentDAO.getIncidentById(editingIncidentId);
                 incidentDAO.close();
             }
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    // 1. Configurer le Spinner
+            AppExecutors.getInstance().mainThread().execute(() -> {
+                if (isAdded() && getActivity() != null) {
                     if (cats != null && !cats.isEmpty()) {
                         ArrayAdapter<Categorie> adapter = new ArrayAdapter<>(getContext(),
                                 android.R.layout.simple_spinner_item, cats);
@@ -147,27 +161,21 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                         spinnerType.setAdapter(adapter);
                     }
 
-                    // 2. Si Édition : Pré-remplir l'interface
                     if (incidentToEdit != null) {
                         setupEditMode(cats);
                     } else {
-                        // Sinon mode création : Lancer GPS
                         checkLocationPermissionAndStart();
                     }
-                });
-            }
-        }).start();
+                }
+            });
+        });
     }
 
     private void setupEditMode(List<Categorie> categories) {
-        // Changer les titres
         tvHeader.setText("Modifier le signalement");
         btnSubmit.setText("Mettre à jour");
-
-        // Remplir description
         etDescription.setText(incidentToEdit.getDescription());
 
-        // Sélectionner la bonne catégorie dans le spinner
         if (categories != null) {
             for (int i = 0; i < categories.size(); i++) {
                 if (categories.get(i).getId() == incidentToEdit.getIdCategorie()) {
@@ -177,73 +185,109 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             }
         }
 
-        // Afficher la photo existante
         if (incidentToEdit.getPhotoUrl() != null) {
             finalPhotoPath = incidentToEdit.getPhotoUrl();
             imgPhotoPreview.setVisibility(View.VISIBLE);
+
+            // CORRECTION TINT : On enlève le filtre gris
+            imgPhotoPreview.setImageTintList(null);
+
+            imgPhotoPreview.setPadding(0, 0, 0, 0);
             Glide.with(this).load(finalPhotoPath).centerCrop().into(imgPhotoPreview);
         }
 
-        // Afficher la position existante (et la garder)
-        lastKnownLocation = new Location("saved");
-        lastKnownLocation.setLatitude(incidentToEdit.getLatitude());
-        lastKnownLocation.setLongitude(incidentToEdit.getLongitude());
-        tvGpsLocation.setText("📍 Position enregistrée : " + incidentToEdit.getLatitude() + ", " + incidentToEdit.getLongitude());
+        // Gestion GPS en mode édition
+        if (incidentToEdit.getLatitude() == 0 && incidentToEdit.getLongitude() == 0) {
+            // C'était un incident sans GPS
+            cbNoGps.setChecked(true);
+            tvGpsLocation.setText("Aucune position précise (Ville/Pays uniquement)");
+        } else {
+            lastKnownLocation = new Location("saved");
+            lastKnownLocation.setLatitude(incidentToEdit.getLatitude());
+            lastKnownLocation.setLongitude(incidentToEdit.getLongitude());
+            tvGpsLocation.setText("📍 Position enregistrée : " + incidentToEdit.getLatitude() + ", " + incidentToEdit.getLongitude());
+        }
 
         btnSubmit.setEnabled(true);
     }
 
+    /**
+     * Sauvegarde (Insert) ou Met à jour (Update) l'incident.
+     */
     private void saveIncident() {
         String desc = etDescription.getText().toString().trim();
-        if (desc.isEmpty()) { etDescription.setError("Requis"); return; }
-
-        // Si on crée, on a besoin du GPS. Si on édite, on a déjà lastKnownLocation (restauré)
-        if (lastKnownLocation == null) {
-            Toast.makeText(getContext(), "Position GPS manquante", Toast.LENGTH_SHORT).show();
+        if (desc.isEmpty()) {
+            etDescription.setError("Description requise");
             return;
         }
 
+        // Gestion Position : Vague vs Précise
+        double lat = 0.0;
+        double lon = 0.0;
+
+        if (!cbNoGps.isChecked()) {
+            if (lastKnownLocation == null) {
+                Toast.makeText(getContext(), "Attente du GPS... ou cochez 'Pas de position précise'", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            lat = lastKnownLocation.getLatitude();
+            lon = lastKnownLocation.getLongitude();
+        }
+
         Incident incident = (incidentToEdit != null) ? incidentToEdit : new Incident();
+
         incident.setDescription(desc);
-        incident.setLatitude(lastKnownLocation.getLatitude());
-        incident.setLongitude(lastKnownLocation.getLongitude());
+        incident.setLatitude(lat);
+        incident.setLongitude(lon);
         incident.setPhotoUrl(finalPhotoPath);
 
         Categorie cat = (Categorie) spinnerType.getSelectedItem();
-        if (cat != null) incident.setIdCategorie(cat.getId());
+        if (cat != null) {
+            incident.setIdCategorie(cat.getId());
+        }
 
         if (incidentToEdit == null) {
             incident.setStatut("Nouveau");
-            incident.setIdUtilisateur(AuthManager.getCurrentUserId(getContext()));
+            incident.setDateSignalement(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date()));
+
+            // --- VERIFICATION CRUCIALE : On assigne l'ID de l'utilisateur connecté ---
+            long userId = AuthManager.getCurrentUserId(getContext());
+            incident.setIdUtilisateur(userId);
+
+            // Debug optionnel :
+            // System.out.println("Sauvegarde incident pour User ID : " + userId);
         }
 
-        new Thread(() -> {
+        AppExecutors.getInstance().diskIO().execute(() -> {
             incidentDAO.open();
             long res;
             if (editingIncidentId != -1) {
-                res = incidentDAO.updateIncident(incident); // UPDATE (C5)
+                res = incidentDAO.updateIncident(incident);
             } else {
-                res = incidentDAO.insertIncident(incident); // INSERT (C2)
+                res = incidentDAO.insertIncident(incident);
             }
             incidentDAO.close();
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
+            AppExecutors.getInstance().mainThread().execute(() -> {
+                if (isAdded() && getActivity() != null) {
                     if (res > 0) {
-                        Toast.makeText(getContext(), editingIncidentId != -1 ? "Modifié avec succès !" : "Envoyé !", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), editingIncidentId != -1 ? "Incident modifié !" : "Incident signalé !", Toast.LENGTH_SHORT).show();
                         getParentFragmentManager().popBackStack();
                     } else {
-                        Toast.makeText(getContext(), "Erreur...", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Erreur lors de l'enregistrement", Toast.LENGTH_SHORT).show();
                     }
-                });
-            }
-        }).start();
+                }
+            });
+        });
     }
 
-    // ... (Le reste du code : GPS, Photo, Permissions reste identique à la version précédente) ...
+    // =========================================================
+    // GESTION DU GPS
+    // =========================================================
 
-    // --- GPS ---
     private void checkLocationPermissionAndStart() {
+        if (cbNoGps.isChecked()) return;
+
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERM_CODE_LOCATION);
         } else {
@@ -252,16 +296,40 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     }
 
     private void startGps() {
-        if (editingIncidentId != -1) return; // Pas de GPS auto en mode édition (on garde l'ancien sauf si forcé)
+        if (editingIncidentId != -1 && incidentToEdit != null) {
+            if (lastKnownLocation != null) return;
+        }
+
         tvGpsLocation.setText("Recherche position...");
         locationHelper = new LocationHelper(getContext());
         locationHelper.startLocationUpdates(this);
     }
 
-    // --- PHOTO (Reste inchangé, voir code précédent) ---
-    private void showImageSourceDialog() { /* ... Code Photo ... */
+    @Override
+    public void onLocationReceived(Location location) {
+        if (cbNoGps.isChecked()) return;
+
+        this.lastKnownLocation = location;
+        if (getContext() != null) {
+            tvGpsLocation.setText(String.format(Locale.getDefault(), "📍 GPS : %.4f, %.4f", location.getLatitude(), location.getLongitude()));
+            btnSubmit.setEnabled(true);
+        }
+    }
+
+    @Override
+    public void onLocationError(String message) {
+        if (getContext() != null && !cbNoGps.isChecked()) {
+            tvGpsLocation.setText("⚠️ " + message);
+        }
+    }
+
+    // =========================================================
+    // GESTION DE LA PHOTO
+    // =========================================================
+
+    private void showImageSourceDialog() {
         String[] options = {"Prendre une photo", "Choisir dans la galerie"};
-        new AlertDialog.Builder(getContext())
+        new AlertDialog.Builder(requireContext())
                 .setTitle("Ajouter une photo")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) {
@@ -285,6 +353,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (Build.VERSION.SDK_INT >= 33) {
             permission = "android.permission.READ_MEDIA_IMAGES";
         }
+
         if (ContextCompat.checkSelfPermission(requireContext(), permission) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{permission}, PERM_CODE_GALLERY);
         } else {
@@ -299,6 +368,8 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             if (requestCode == PERM_CODE_CAMERA) dispatchTakePictureIntent();
             if (requestCode == PERM_CODE_GALLERY) dispatchGalleryIntent();
             if (requestCode == PERM_CODE_LOCATION) startGps();
+        } else {
+            Toast.makeText(getContext(), "Permission refusée", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -308,7 +379,9 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             File photoFile = null;
             try {
                 photoFile = createImageFile();
-            } catch (IOException ex) { }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
             if (photoFile != null) {
                 Uri photoURI = FileProvider.getUriForFile(requireContext(), "com.example.safecity.fileprovider", photoFile);
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
@@ -347,27 +420,25 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
                 if (processedFile != null) {
                     finalPhotoPath = processedFile.getAbsolutePath();
+
+                    // CORRECTION TINT : On enlève le filtre gris
+                    imgPhotoPreview.setImageTintList(null);
+
+                    imgPhotoPreview.setPadding(0, 0, 0, 0);
                     Glide.with(this).load(finalPhotoPath).centerCrop().into(imgPhotoPreview);
                 }
-            } catch (IOException e) { e.printStackTrace(); }
+            } catch (IOException e) {
+                e.printStackTrace();
+                Toast.makeText(getContext(), "Erreur lors du traitement de l'image", Toast.LENGTH_SHORT).show();
+            }
         }
-    }
-
-    @Override
-    public void onLocationReceived(Location location) {
-        lastKnownLocation = location;
-        tvGpsLocation.setText("📍 Position : " + location.getLatitude() + ", " + location.getLongitude());
-        btnSubmit.setEnabled(true);
-    }
-
-    @Override
-    public void onLocationError(String message) {
-        tvGpsLocation.setText("⚠️ " + message);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (locationHelper != null) locationHelper.stopLocationUpdates();
+        if (locationHelper != null) {
+            locationHelper.stopLocationUpdates();
+        }
     }
 }

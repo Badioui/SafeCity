@@ -14,13 +14,20 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
-import com.example.safecity.R;
-import com.example.safecity.utils.PermissionManager; // Import B2
+import com.google.android.gms.maps.model.MarkerOptions;
 
-// 💡 Le Fragment implémente l'interface de callback.
+import com.example.safecity.R;
+import com.example.safecity.utils.AppExecutors;
+import com.example.safecity.utils.PermissionManager;
+import com.example.safecity.dao.IncidentDAO;
+import com.example.safecity.model.Incident;
+
+import java.util.List;
+
 public class MapFragment extends Fragment implements OnMapReadyCallback {
 
     private GoogleMap googleMap;
+    private IncidentDAO incidentDAO;
 
     @Nullable
     @Override
@@ -44,37 +51,76 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
 
-        // Définir une position par défaut (Ex: Paris)
-        LatLng defaultLocation = new LatLng(48.8566, 2.3522);
+        // Position par défaut (Ex: Oujda)
+        LatLng defaultLocation = new LatLng(34.6814, -1.9076);
         this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultLocation, 12));
         this.googleMap.getUiSettings().setZoomControlsEnabled(true);
 
-        // --- Logique B2 : Vérifier la permission au chargement ---
+        // Activation de la localisation utilisateur si permissions OK
         enableUserLocation();
 
-        // TO-DO B3: Charger les marqueurs des incidents.
+        // Chargement des marqueurs
+        loadIncidentMarkers();
     }
 
     /**
-     * Tâche B2: Active le point bleu de position de l'utilisateur.
-     * Cette méthode est appelée après onMapReady et après l'accord des permissions.
+     * Charge les incidents depuis la base de données et ajoute des marqueurs sur la carte.
+     * Filtre les incidents sans coordonnées précises (0.0, 0.0).
+     */
+    private void loadIncidentMarkers() {
+        // Utilisation de AppExecutors pour le background thread
+        AppExecutors.getInstance().diskIO().execute(() -> {
+            incidentDAO = new IncidentDAO(requireContext());
+            incidentDAO.open();
+            List<Incident> incidents = incidentDAO.getAllIncidents();
+            incidentDAO.close();
+
+            // Retour sur le thread principal pour l'UI
+            AppExecutors.getInstance().mainThread().execute(() -> {
+                // Vérifications de sécurité : Fragment attaché et Map prête
+                if (isAdded() && getActivity() != null && googleMap != null) {
+                    for (Incident inc : incidents) {
+
+                        // --- LOGIQUE DE FILTRAGE RENFORCÉE ---
+
+                        // 1. Si les coordonnées sont exactement (0,0)
+                        if (inc.getLatitude() == 0 && inc.getLongitude() == 0) {
+                            continue;
+                        }
+
+                        // 2. Si les coordonnées sont presque nulles (erreur capteur ou approximation)
+                        if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
+                            continue;
+                        }
+
+                        LatLng position = new LatLng(inc.getLatitude(), inc.getLongitude());
+
+                        googleMap.addMarker(new MarkerOptions()
+                                .position(position)
+                                .title(inc.getStatut()) // Titre (ex: Nouveau, En cours)
+                                .snippet(inc.getDescription())); // Description
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Active le point bleu de position de l'utilisateur.
      */
     public void enableUserLocation() {
-        // Vérifie si la carte est initialisée ET si nous avons la permission FINE_LOCATION
         if (googleMap != null && PermissionManager.checkAllPermissions(requireContext())) {
             try {
-                // Active le bouton et la couche de localisation
                 googleMap.setMyLocationEnabled(true);
                 googleMap.getUiSettings().setMyLocationButtonEnabled(true);
             } catch (SecurityException e) {
-                // Le catch est théoriquement inutile grâce à la vérification de PermissionManager
                 e.printStackTrace();
             }
         }
     }
 
     /**
-     * Centrage de la carte sur une position donnée (optionnel pour B2/C2)
+     * Centrage de la carte sur une position donnée
      */
     public void centerMapOnLocation(Location location) {
         if (googleMap != null) {

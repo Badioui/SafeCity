@@ -1,5 +1,6 @@
 package com.example.safecity;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.ImageButton;
 import android.widget.Toast;
@@ -8,12 +9,14 @@ import androidx.fragment.app.Fragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 // Imports de vos fragments
-import com.example.safecity.ui.fragments.HomeFragment;       // Le "Fil d'actu"
-import com.example.safecity.ui.fragments.MapFragment;        // La Carte
-import com.example.safecity.ui.fragments.SignalementFragment;// Créer (Le +)
-import com.example.safecity.ui.fragments.ProfileFragment;    // Profil
-import com.example.safecity.ui.fragments.MyIncidentsFragment; // <--- AJOUTER CETTE LIGNE
-// import com.example.safecity.ui.fragments.ActivityFragment; // Notifications (à créer)
+import com.example.safecity.ui.fragments.HomeFragment;
+import com.example.safecity.ui.fragments.MapFragment;
+import com.example.safecity.ui.fragments.SignalementFragment;
+import com.example.safecity.ui.fragments.ProfileFragment;
+import com.example.safecity.ui.fragments.MyIncidentsFragment;
+
+// Import pour la gestion de l'authentification
+import com.example.safecity.utils.AuthManager;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -32,32 +35,39 @@ public class MainActivity extends AppCompatActivity {
             int itemId = item.getItemId();
 
             if (itemId == R.id.nav_home) {
-                // 🏠 HOME = Le Fil d'actualité global (Tous les posts)
+                // 🏠 HOME
                 selectedFragment = new HomeFragment();
 
             } else if (itemId == R.id.nav_map) {
-                // 🗺️ MAP = La Carte
+                // 🗺️ MAP
                 selectedFragment = new MapFragment();
 
             } else if (itemId == R.id.nav_create) {
-                // ➕ CREATE = Le Formulaire
+                // ➕ CREATE
+                // 1. Vérifier si l'utilisateur est connecté (CRUCIAL)
+                if (!AuthManager.isLoggedIn(this)) {
+                    Toast.makeText(this, "Veuillez vous connecter pour signaler un incident", Toast.LENGTH_SHORT).show();
+                    // Rediriger vers Login
+                    startActivity(new Intent(this, LoginActivity.class));
+                    return false; // Annuler la sélection du menu
+                }
+                // 2. Si connecté, on ouvre le fragment
                 selectedFragment = new SignalementFragment();
 
             } else if (itemId == R.id.nav_activity) {
-                // ❤️ ACTIVITY = Notifications (Placeholder)
+                // ❤️ ACTIVITY
                 Toast.makeText(this, "Notifications à venir", Toast.LENGTH_SHORT).show();
-                return false; // Reste sur la page actuelle
+                return false;
 
             } else if (itemId == R.id.nav_profile) {
-                // 👤 PROFILE = Mon Profil + Mes Incidents
-                // Pour l'instant, on utilise MyIncidentsFragment pour voir MES posts
-                // Plus tard, on pourra intégrer ça dans un ProfileFragment plus complet
-                selectedFragment = new MyIncidentsFragment();
+                // 👤 PROFILE
+                selectedFragment = new ProfileFragment();
             }
 
             if (selectedFragment != null) {
                 getSupportFragmentManager().beginTransaction()
                         .replace(R.id.nav_host_fragment, selectedFragment)
+                        .addToBackStack(null) // <--- AJOUTÉ : Permet le retour en arrière (popBackStack)
                         .commit();
             }
             return true;
@@ -66,9 +76,7 @@ public class MainActivity extends AppCompatActivity {
         // --- Gestion du Bouton Recherche (En haut) ---
         btnSearch = findViewById(R.id.btn_search);
         btnSearch.setOnClickListener(v -> {
-            // Idée : Ouvrir un fragment de recherche ou une barre de recherche
             Toast.makeText(MainActivity.this, "Recherche ouverte 🔍", Toast.LENGTH_SHORT).show();
-            // Exemple : charger un SearchFragment
         });
 
         // Charger l'Accueil par défaut au démarrage
