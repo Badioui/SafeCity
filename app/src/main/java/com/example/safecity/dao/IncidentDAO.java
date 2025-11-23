@@ -1,4 +1,4 @@
-package com.example.safecity.dao;
+/**package com.example.safecity.dao;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -18,7 +18,7 @@ import java.util.Map;
  * * Gestion complète des opérations CRUD sur la table "incidents".
  * CORRIGÉ : Utilise la table 'users' et gère correctement les alias SQL.
  */
-public class IncidentDAO {
+/**public class IncidentDAO {
 
     private static final String TAG = "IncidentDAO";
 
@@ -329,5 +329,5 @@ public class IncidentDAO {
         finally { if (cursor != null) cursor.close(); }
         return stats;
     }
-}
+}**/
 

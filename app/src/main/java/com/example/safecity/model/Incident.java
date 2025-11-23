@@ -2,7 +2,7 @@ package com.example.safecity.model;
 
 /**
  * Modèle représentant un incident signalé par un citoyen.
- * Correspond à la table "incidents".
+ * Adapté pour Firebase Firestore (IDs en String).
  * Auteur : Asmaa
  */
 public class Incident {
@@ -13,24 +13,35 @@ public class Incident {
     public static final String STATUT_TRAITE = "Traité";
 
     // --- Champs ---
-    private long id;                 // id_incident
+    // Firestore utilise des Strings pour les IDs (Document ID)
+    private String id;               // id_incident (Firestore Document ID)
+
     private String photoUrl;         // photo_url
     private String description;      // description
-    private Long idCategorie;        // FK vers categories(id_categorie)
+
+    // Les clés étrangères deviennent des Strings car les IDs cibles sont des Strings dans Firestore
+    private String idCategorie;      // FK vers collection categories
+
     private double latitude;         // latitude
     private double longitude;        // longitude
-    private String dateSignalement;  // TEXT (SQLite timestamp)
+    private String dateSignalement;  // Date formatée
     private String statut;           // Nouveau / En cours / Traité
-    private long idUtilisateur;      // FK vers users(id_utilisateur)
+
+    private String idUtilisateur;    // FK vers collection users (Auth UID)
+
     private String userName;
     private String nomCategorie;
     private String nomUtilisateur;
-    // --- Constructeurs ---
-    public Incident() {}
 
-    public Incident(long id, String photoUrl, String description,
-                    long idCategorie, double latitude, double longitude,
-                    String dateSignalement, String statut, long idUtilisateur) {
+    // --- Constructeur Vide (OBLIGATOIRE POUR FIREBASE) ---
+    public Incident() {
+        // Firebase a besoin de ce constructeur vide pour reconstruire l'objet
+    }
+
+    // --- Constructeur Complet ---
+    public Incident(String id, String photoUrl, String description,
+                    String idCategorie, double latitude, double longitude,
+                    String dateSignalement, String statut, String idUtilisateur) {
         this.id = id;
         this.photoUrl = photoUrl;
         this.description = description;
@@ -43,8 +54,10 @@ public class Incident {
     }
 
     // --- Getters / Setters ---
-    public long getId() { return id; }
-    public void setId(long id) { this.id = id; }
+
+    // ID est maintenant un String
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
@@ -52,8 +65,9 @@ public class Incident {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public Long getIdCategorie() { return idCategorie; }
-    public void setIdCategorie(Long idCategorie) { this.idCategorie = idCategorie; }
+    // Categorie ID est maintenant un String
+    public String getIdCategorie() { return idCategorie; }
+    public void setIdCategorie(String idCategorie) { this.idCategorie = idCategorie; }
 
     public double getLatitude() { return latitude; }
     public void setLatitude(double latitude) { this.latitude = latitude; }
@@ -67,8 +81,9 @@ public class Incident {
     public String getStatut() { return statut; }
     public void setStatut(String statut) { this.statut = statut; }
 
-    public long getIdUtilisateur() { return idUtilisateur; }
-    public void setIdUtilisateur(long idUtilisateur) { this.idUtilisateur = idUtilisateur; }
+    // Utilisateur ID est maintenant un String (UID)
+    public String getIdUtilisateur() { return idUtilisateur; }
+    public void setIdUtilisateur(String idUtilisateur) { this.idUtilisateur = idUtilisateur; }
 
     public String getNomCategorie() { return nomCategorie; }
     public void setNomCategorie(String nomCategorie) { this.nomCategorie = nomCategorie; }
@@ -76,7 +91,6 @@ public class Incident {
     public String getNomUtilisateur() { return nomUtilisateur; }
     public void setNomUtilisateur(String nomUtilisateur) { this.nomUtilisateur = nomUtilisateur; }
 
-    // AJOUTEZ CES DEUX MÉTHODES :
     public String getUserName() { return userName; }
     public void setUserName(String userName) { this.userName = userName; }
 

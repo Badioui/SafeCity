@@ -15,16 +15,15 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.safecity.LoginActivity; // Assurez-vous d'avoir créé LoginActivity
+import com.example.safecity.LoginActivity;
 import com.example.safecity.R;
-import com.example.safecity.dao.IncidentDAO;
-import com.example.safecity.dao.UserDAO;
 import com.example.safecity.model.Incident;
-import com.example.safecity.model.Utilisateur;
 import com.example.safecity.ui.adapters.IncidentAdapter;
-import com.example.safecity.utils.AppExecutors;
-import com.example.safecity.utils.AuthManager;
+import com.example.safecity.utils.FirestoreRepository;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
@@ -32,8 +31,12 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     private TextView tvName, tvEmail;
     private Button btnLogout;
     private RecyclerView recyclerView;
-    private IncidentDAO incidentDAO;
-    private UserDAO userDAO;
+
+    // Remplacement des DAO par les outils Firebase
+    private FirestoreRepository firestoreRepo;
+    private FirebaseAuth auth;
+
+    private IncidentAdapter adapter;
 
     @Nullable
     @Override
@@ -45,6 +48,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Initialisation UI
         tvName = view.findViewById(R.id.tv_profile_name);
         tvEmail = view.findViewById(R.id.tv_profile_email);
         btnLogout = view.findViewById(R.id.btn_logout);
@@ -52,9 +56,19 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // Gestion Déconnexion
+        // Initialisation Adapter vide
+        adapter = new IncidentAdapter(getContext(), new ArrayList<>(), this);
+        recyclerView.setAdapter(adapter);
+
+        // Initialisation Firebase
+        auth = FirebaseAuth.getInstance();
+        firestoreRepo = new FirestoreRepository();
+
+        // Gestion Déconnexion Firebase
         btnLogout.setOnClickListener(v -> {
-            AuthManager.logout(getContext());
+            auth.signOut(); // Déconnexion Firebase
+
+            // Retour au Login
             Intent intent = new Intent(getActivity(), LoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
@@ -63,53 +77,65 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         loadProfileData();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Recharger les données au retour (cas suppression ou modification)
+        loadProfileData();
+    }
+
     private void loadProfileData() {
-        long userId = AuthManager.getCurrentUserId(getContext());
-        if (userId == -1) return; // Pas connecté
+        FirebaseUser user = auth.getCurrentUser();
 
-        AppExecutors.getInstance().diskIO().execute(() -> {
-            // 1. Charger Infos User
-            userDAO = new UserDAO(getContext());
-            userDAO.open();
-            Utilisateur user = userDAO.getUserById(userId);
-            userDAO.close();
+        if (user == null) {
+            // Sécurité : si pas d'utilisateur, on force la déconnexion ou on affiche rien
+            return;
+        }
 
-            // 2. Charger Ses Incidents
-            incidentDAO = new IncidentDAO(getContext());
-            incidentDAO.open();
-            List<Incident> myIncidents = incidentDAO.getIncidentsByUtilisateur(userId);
-            incidentDAO.close();
+        // 1. Afficher les infos utilisateur (Disponibles immédiatement via FirebaseUser)
+        String name = user.getDisplayName();
+        String email = user.getEmail();
 
-            AppExecutors.getInstance().mainThread().execute(() -> {
+        tvName.setText(name != null && !name.isEmpty() ? name : "Utilisateur");
+        tvEmail.setText(email != null ? email : "Email non disponible");
+
+        // 2. Charger les incidents de cet utilisateur via Firestore
+        firestoreRepo.getMyIncidents(user.getUid(), new FirestoreRepository.OnDataLoadListener() {
+            @Override
+            public void onIncidentsLoaded(List<Incident> incidents) {
                 if (isAdded() && getActivity() != null) {
-                    // Mise à jour Infos
-                    if (user != null) {
-                        tvName.setText(user.getNom());
-                        tvEmail.setText(user.getEmail());
-                    }
-
-                    // Mise à jour Liste
-                    if (myIncidents != null && !myIncidents.isEmpty()) {
-                        IncidentAdapter adapter = new IncidentAdapter(getContext(), myIncidents, this);
+                    if (incidents != null && !incidents.isEmpty()) {
+                        adapter = new IncidentAdapter(getContext(), incidents, ProfileFragment.this);
                         recyclerView.setAdapter(adapter);
                     } else {
-                        // Optionnel : Afficher un message "Aucun post"
+                        adapter.updateData(new ArrayList<>());
+                        // Optionnel : Afficher un Toast ou View vide
                     }
                 }
-            });
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
         });
     }
 
     // --- GESTION DES BOUTONS (Modifier / Supprimer) ---
+
     @Override
     public void onMapClick(Incident incident) {
-        // Rediriger vers la Map (A faire plus tard si besoin)
+        Toast.makeText(getContext(), "Localisation : " + incident.getLatitude() + ", " + incident.getLongitude(), Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onEditClick(Incident incident) {
-        // Ouvrir SignalementFragment en mode édition
-        SignalementFragment fragment = SignalementFragment.newInstance(incident.getId());
+        // Ouvrir SignalementFragment en mode édition avec l'ID String
+        Fragment fragment = SignalementFragment.newInstance(incident.getId());
+
+        // Note: Assurez-vous que R.id.fragment_container correspond bien à l'ID dans votre MainActivity
         getParentFragmentManager().beginTransaction()
                 .replace(R.id.nav_host_fragment, fragment)
                 .addToBackStack(null)
@@ -118,14 +144,22 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
     @Override
     public void onDeleteClick(Incident incident) {
-        AppExecutors.getInstance().diskIO().execute(() -> {
-            incidentDAO = new IncidentDAO(getContext());
-            incidentDAO.open();
-            incidentDAO.deleteIncident(incident.getId());
-            incidentDAO.close();
+        // Suppression via Firestore
+        firestoreRepo.deleteIncident(incident.getId(), new FirestoreRepository.OnFirestoreTaskComplete() {
+            @Override
+            public void onSuccess() {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Incident supprimé !", Toast.LENGTH_SHORT).show();
+                    loadProfileData(); // Recharger la liste
+                }
+            }
 
-            // Recharger la page
-            loadProfileData();
+            @Override
+            public void onError(Exception e) {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Erreur suppression : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
         });
     }
 }

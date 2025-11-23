@@ -5,6 +5,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -12,10 +14,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.safecity.R;
-import com.example.safecity.dao.IncidentDAO;
 import com.example.safecity.model.Incident;
+import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.ui.adapters.IncidentAdapter;
-import com.example.safecity.utils.AppExecutors;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +26,9 @@ public class HomeFragment extends Fragment {
     private RecyclerView recyclerView;
     private TextView tvEmptyState;
     private IncidentAdapter adapter;
-    private IncidentDAO incidentDAO;
+
+    // Remplacement de IncidentDAO par FirestoreRepository
+    private FirestoreRepository firestoreRepo;
 
     @Nullable
     @Override
@@ -46,41 +50,40 @@ public class HomeFragment extends Fragment {
         adapter = new IncidentAdapter(getContext(), new ArrayList<>());
         recyclerView.setAdapter(adapter);
 
-        incidentDAO = new IncidentDAO(getContext());
-    }
+        // Initialisation du repository Firestore
+        firestoreRepo = new FirestoreRepository();
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Recharger la liste à chaque fois qu'on revient sur cet écran
+        // Lancer le chargement (écoute en temps réel)
         loadData();
     }
 
+    // Note : Avec Firestore Realtime, pas besoin de onResume() pour recharger,
+    // le listener mis en place dans loadData() reste actif tant que le fragment vit.
+
     private void loadData() {
-        com.example.safecity.utils.AppExecutors.getInstance().diskIO().execute(() -> {
-            try {
-                incidentDAO.open();
-                List<Incident> incidents = incidentDAO.getAllIncidents();
-                incidentDAO.close();
+        // Appel à la méthode temps réel du repository
+        firestoreRepo.getIncidentsRealtime(new FirestoreRepository.OnDataLoadListener() {
+            @Override
+            public void onIncidentsLoaded(List<Incident> incidents) {
+                // Vérifier si le fragment est toujours attaché pour éviter les crashs
+                if (!isAdded() || getActivity() == null) return;
 
-                // DEBUG : Afficher dans les logs le nombre d'incidents trouvés
-                android.util.Log.d("DEBUG_HOME", "Nombre d'incidents trouvés : " + (incidents != null ? incidents.size() : "NULL"));
+                if (incidents != null && !incidents.isEmpty()) {
+                    adapter.updateData(incidents);
+                    tvEmptyState.setVisibility(View.GONE);
+                    recyclerView.setVisibility(View.VISIBLE);
+                } else {
+                    tvEmptyState.setText("Aucun incident signalé pour le moment.");
+                    tvEmptyState.setVisibility(View.VISIBLE);
+                    recyclerView.setVisibility(View.GONE);
+                }
+            }
 
-                com.example.safecity.utils.AppExecutors.getInstance().mainThread().execute(() -> {
-                    if (isAdded() && getActivity() != null) {
-                        if (incidents != null && !incidents.isEmpty()) {
-                            adapter.updateData(incidents);
-                            tvEmptyState.setVisibility(View.GONE);
-                            recyclerView.setVisibility(View.VISIBLE);
-                        } else {
-                            tvEmptyState.setText("Aucun incident trouvé en base de données."); // Message plus précis
-                            tvEmptyState.setVisibility(View.VISIBLE);
-                            recyclerView.setVisibility(View.GONE);
-                        }
-                    }
-                });
-            } catch (Exception e) {
-                e.printStackTrace(); // Afficher l'erreur dans le Logcat
+            @Override
+            public void onError(Exception e) {
+                if (isAdded() && getContext() != null) {
+                    Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
