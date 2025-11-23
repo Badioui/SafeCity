@@ -2,68 +2,114 @@ package com.example.safecity;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
-import com.example.safecity.dao.UserDAO;
+
 import com.example.safecity.model.Utilisateur;
-import com.example.safecity.utils.AppExecutors; // Import AppExecutors
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.UserProfileChangeRequest;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 public class RegisterActivity extends AppCompatActivity {
 
-    private UserDAO userDAO;
+    private EditText etName, etEmail, etPass;
+    private Button btnRegister;
+    private TextView tvLogin;
+    private ProgressBar progressBar; // Ajoute une ProgressBar dans ton XML si tu veux
+
+    private FirebaseAuth auth;
+    private FirebaseFirestore db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        userDAO = new UserDAO(this);
+        // 1. Initialisation Firebase
+        auth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
-        EditText etName = findViewById(R.id.et_register_name);
-        EditText etEmail = findViewById(R.id.et_register_email);
-        EditText etPass = findViewById(R.id.et_register_password);
-        Button btnRegister = findViewById(R.id.btn_register);
-        TextView tvLogin = findViewById(R.id.tv_go_to_login);
+        // 2. Liaison UI
+        etName = findViewById(R.id.et_register_name);
+        etEmail = findViewById(R.id.et_register_email);
+        etPass = findViewById(R.id.et_register_password);
+        btnRegister = findViewById(R.id.btn_register);
+        tvLogin = findViewById(R.id.tv_go_to_login);
 
-        btnRegister.setOnClickListener(v -> {
-            String nom = etName.getText().toString();
-            String email = etEmail.getText().toString();
-            String pass = etPass.getText().toString();
+        // (Optionnel: Ajoute <ProgressBar android:id="@+id/progressBar" ... /> dans ton layout)
+        // progressBar = findViewById(R.id.progressBar);
 
-            if (nom.isEmpty() || email.isEmpty() || pass.isEmpty()) {
-                Toast.makeText(this, "Remplissez tout !", Toast.LENGTH_SHORT).show();
-                return;
-            }
+        btnRegister.setOnClickListener(v -> registerUser());
+        tvLogin.setOnClickListener(v -> finish());
+    }
 
-            // Création objet utilisateur (Rôle 3 = Citoyen par défaut)
-            Utilisateur user = new Utilisateur();
-            user.setNom(nom);
-            user.setEmail(email);
-            user.setIdRole(3);
+    private void registerUser() {
+        String nom = etName.getText().toString().trim();
+        String email = etEmail.getText().toString().trim();
+        String pass = etPass.getText().toString().trim();
 
-            // Insertion en base via AppExecutors (DiskIO)
-            AppExecutors.getInstance().diskIO().execute(() -> {
-                userDAO.open();
-                long id = userDAO.insertUser(user, pass);
-                userDAO.close();
+        if (TextUtils.isEmpty(nom) || TextUtils.isEmpty(email) || TextUtils.isEmpty(pass)) {
+            Toast.makeText(this, "Veuillez tout remplir", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-                // Mise à jour UI via AppExecutors (MainThread)
-                AppExecutors.getInstance().mainThread().execute(() -> {
-                    if (id > 0) {
-                        Toast.makeText(RegisterActivity.this, "Succès ! Connectez-vous.", Toast.LENGTH_SHORT).show();
-                        finish(); // Retour au login
-                    } else if (id == -2) {
-                        Toast.makeText(RegisterActivity.this, "Cet email existe déjà.", Toast.LENGTH_SHORT).show();
+        if (pass.length() < 6) {
+            Toast.makeText(this, "Le mot de passe doit faire 6 caractères min.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Désactiver le bouton pour éviter les doubles clics
+        btnRegister.setEnabled(false);
+
+        // 3. Création dans Firebase Auth
+        auth.createUserWithEmailAndPassword(email, pass)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser firebaseUser = auth.getCurrentUser();
+
+                        // 4. Mise à jour du profil (Nom)
+                        UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
+                                .setDisplayName(nom)
+                                .build();
+
+                        if (firebaseUser != null) {
+                            firebaseUser.updateProfile(profileUpdates);
+
+                            // 5. Sauvegarder les infos sup. dans Firestore (Role, etc.)
+                            saveUserToFirestore(firebaseUser.getUid(), nom, email);
+                        }
                     } else {
-                        Toast.makeText(RegisterActivity.this, "Erreur d'inscription.", Toast.LENGTH_SHORT).show();
+                        btnRegister.setEnabled(true);
+                        Toast.makeText(RegisterActivity.this, "Erreur : " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
-            });
-        });
+    }
 
-        tvLogin.setOnClickListener(v -> finish());
+    private void saveUserToFirestore(String uid, String nom, String email) {
+        // On crée un objet Utilisateur pour Firestore
+        Utilisateur newUser = new Utilisateur();
+        newUser.setNom(nom);
+        newUser.setEmail(email);
+        newUser.setIdRole(3); // 3 = Citoyen
+
+        db.collection("users").document(uid)
+                .set(newUser)
+                .addOnSuccessListener(aVoid -> {
+                    Toast.makeText(RegisterActivity.this, "Compte créé avec succès !", Toast.LENGTH_SHORT).show();
+                    // Rediriger vers MainActivity ou Login
+                    startActivity(new Intent(RegisterActivity.this, MainActivity.class));
+                    finish();
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(RegisterActivity.this, "Compte créé mais erreur sauvegarde infos.", Toast.LENGTH_SHORT).show();
+                });
     }
 }

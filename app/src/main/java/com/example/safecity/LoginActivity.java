@@ -2,70 +2,88 @@ package com.example.safecity;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
-import com.example.safecity.dao.UserDAO;
-import com.example.safecity.model.Utilisateur;
-import com.example.safecity.utils.AppExecutors; // Import AppExecutors
-import com.example.safecity.utils.AuthManager;
+
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 public class LoginActivity extends AppCompatActivity {
 
-    private UserDAO userDAO;
+    private FirebaseAuth auth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Si déjà connecté, on va direct à l'accueil
-        if (AuthManager.isLoggedIn(this)) {
+        // 1. Initialisation de Firebase Auth
+        auth = FirebaseAuth.getInstance();
+
+        // 2. Vérification auto : Si l'utilisateur est déjà connecté, on file direct à l'accueil
+        if (auth.getCurrentUser() != null) {
             goToMain();
-            return;
+            return; // On arrête l'exécution ici
         }
 
         setContentView(R.layout.activity_login);
-        userDAO = new UserDAO(this);
 
+        // Liaison UI
         EditText etEmail = findViewById(R.id.et_login_email);
         EditText etPass = findViewById(R.id.et_login_password);
         Button btnLogin = findViewById(R.id.btn_login);
         TextView tvRegister = findViewById(R.id.tv_go_to_register);
 
+        // Click Connexion
         btnLogin.setOnClickListener(v -> {
-            String email = etEmail.getText().toString();
-            String pass = etPass.getText().toString();
+            String email = etEmail.getText().toString().trim();
+            String pass = etPass.getText().toString().trim();
 
-            // Remplacement de new Thread() par AppExecutors
-            AppExecutors.getInstance().diskIO().execute(() -> {
-                userDAO.open();
-                // Vérification mot de passe
-                Utilisateur user = userDAO.authenticate(email, pass);
-                userDAO.close();
+            if (TextUtils.isEmpty(email) || TextUtils.isEmpty(pass)) {
+                Toast.makeText(LoginActivity.this, "Veuillez remplir tous les champs", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-                // Retour sur le thread principal pour l'UI
-                AppExecutors.getInstance().mainThread().execute(() -> {
-                    if (user != null) {
-                        // SAUVEGARDE DE LA SESSION
-                        AuthManager.saveSession(LoginActivity.this, user.getId(), user.getIdRole());
-                        Toast.makeText(LoginActivity.this, "Bienvenue " + user.getNom(), Toast.LENGTH_SHORT).show();
-                        goToMain();
-                    } else {
-                        Toast.makeText(LoginActivity.this, "Identifiants incorrects", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            });
+            // Connexion avec Firebase
+            loginUser(email, pass);
         });
 
+        // Redirection vers Inscription
         tvRegister.setOnClickListener(v -> {
-            startActivity(new Intent(this, RegisterActivity.class));
+            startActivity(new Intent(LoginActivity.this, RegisterActivity.class));
         });
     }
 
+    private void loginUser(String email, String password) {
+        // On affiche un petit message (ou on pourrait mettre une ProgressBar)
+        Toast.makeText(this, "Connexion en cours...", Toast.LENGTH_SHORT).show();
+
+        auth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        // Succès !
+                        FirebaseUser user = auth.getCurrentUser();
+                        String nom = (user.getDisplayName() != null) ? user.getDisplayName() : "Utilisateur";
+
+                        Toast.makeText(LoginActivity.this, "Bienvenue " + nom, Toast.LENGTH_SHORT).show();
+                        goToMain();
+                    } else {
+                        // Échec (Mot de passe faux, compte inexistant, pas d'internet...)
+                        String error = task.getException() != null ? task.getException().getMessage() : "Erreur inconnue";
+                        Toast.makeText(LoginActivity.this, "Erreur : " + error, Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
     private void goToMain() {
-        startActivity(new Intent(this, MainActivity.class));
-        finish(); // Empêche le retour arrière vers le login
+        Intent intent = new Intent(this, MainActivity.class);
+        // Ces flags empêchent de revenir au login en faisant "Retour" depuis l'accueil
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
 }
