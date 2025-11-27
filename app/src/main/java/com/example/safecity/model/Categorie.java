@@ -1,30 +1,32 @@
 package com.example.safecity.model;
 
+import com.google.firebase.firestore.DocumentId;
+
 /**
  * Modèle représentant une catégorie d’incident.
- * (Vol, Accident, Incendie, etc.)
- * Correspond à la table "categories".
- *  Auteur : Asmaa
+ * Adapté pour Firestore (ID String).
  */
 public class Categorie {
 
-    private long id;                // id_categorie
-    private String nomCategorie;    // nom_categorie (unique)
+    @DocumentId // Cette annotation remplit automatiquement l'ID avec celui du document Firestore lors de la lecture
+    private String id;
+    private String nomCategorie;
 
-    // --- Constructeurs ---
+    // --- Constructeur vide OBLIGATOIRE pour Firestore ---
     public Categorie() {}
 
-    public Categorie(long id, String nomCategorie) {
+    public Categorie(String id, String nomCategorie) {
         this.id = id;
         this.nomCategorie = nomCategorie;
     }
 
     // --- Getters / Setters ---
-    public long getId() {
+    // Note : L'ID est maintenant un String
+    public String getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -39,6 +41,6 @@ public class Categorie {
     // --- Utilitaire ---
     @Override
     public String toString() {
-        return nomCategorie;
+        return nomCategorie; // Ce qui sera affiché dans le Spinner
     }
 }

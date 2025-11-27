@@ -18,12 +18,13 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import java.util.Date;
+
 public class RegisterActivity extends AppCompatActivity {
 
     private EditText etName, etEmail, etPass;
     private Button btnRegister;
     private TextView tvLogin;
-    private ProgressBar progressBar; // Ajoute une ProgressBar dans ton XML si tu veux
 
     private FirebaseAuth auth;
     private FirebaseFirestore db;
@@ -43,9 +44,6 @@ public class RegisterActivity extends AppCompatActivity {
         etPass = findViewById(R.id.et_register_password);
         btnRegister = findViewById(R.id.btn_register);
         tvLogin = findViewById(R.id.tv_go_to_login);
-
-        // (Optionnel: Ajoute <ProgressBar android:id="@+id/progressBar" ... /> dans ton layout)
-        // progressBar = findViewById(R.id.progressBar);
 
         btnRegister.setOnClickListener(v -> registerUser());
         tvLogin.setOnClickListener(v -> finish());
@@ -75,7 +73,7 @@ public class RegisterActivity extends AppCompatActivity {
                     if (task.isSuccessful()) {
                         FirebaseUser firebaseUser = auth.getCurrentUser();
 
-                        // 4. Mise à jour du profil (Nom)
+                        // 4. Mise à jour du profil (Nom) dans Auth
                         UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
                                 .setDisplayName(nom)
                                 .build();
@@ -83,7 +81,7 @@ public class RegisterActivity extends AppCompatActivity {
                         if (firebaseUser != null) {
                             firebaseUser.updateProfile(profileUpdates);
 
-                            // 5. Sauvegarder les infos sup. dans Firestore (Role, etc.)
+                            // 5. Sauvegarder les infos sup. dans Firestore
                             saveUserToFirestore(firebaseUser.getUid(), nom, email);
                         }
                     } else {
@@ -98,18 +96,26 @@ public class RegisterActivity extends AppCompatActivity {
         Utilisateur newUser = new Utilisateur();
         newUser.setNom(nom);
         newUser.setEmail(email);
-        newUser.setIdRole(3); // 3 = Citoyen
+
+        // --- CORRECTION MAJEURE ICI ---
+        // Avant : newUser.setIdRole(3); -> Erreur car idRole est maintenant un String
+        // Maintenant : On assigne l'ID String du document rôle correspondant
+        newUser.setIdRole("citoyen");
+
+        // On peut aussi ajouter la date de création si le champ existe dans votre modèle
+        // newUser.setDateCreation(new Date().toString());
 
         db.collection("users").document(uid)
                 .set(newUser)
                 .addOnSuccessListener(aVoid -> {
                     Toast.makeText(RegisterActivity.this, "Compte créé avec succès !", Toast.LENGTH_SHORT).show();
-                    // Rediriger vers MainActivity ou Login
+                    // Rediriger vers MainActivity (ou Login)
                     startActivity(new Intent(RegisterActivity.this, MainActivity.class));
                     finish();
                 })
                 .addOnFailureListener(e -> {
-                    Toast.makeText(RegisterActivity.this, "Compte créé mais erreur sauvegarde infos.", Toast.LENGTH_SHORT).show();
+                    btnRegister.setEnabled(true);
+                    Toast.makeText(RegisterActivity.this, "Compte Auth créé mais erreur sauvegarde Firestore : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
     }
 }

@@ -1,24 +1,32 @@
 package com.example.safecity.model;
 
+import com.google.firebase.firestore.DocumentId;
+
 /**
  * Modèle représentant un utilisateur (citoyen, autorité ou admin).
- * Correspond à la table "users".
- *  Auteur : Asmaa
+ * Adapté pour Firestore :
+ * - id est maintenant une String (correspond souvent à l'UID Firebase Auth)
+ * - idRole est maintenant une String (référence au document Role)
  */
 public class Utilisateur {
 
-    private long id;                 // id_utilisateur
-    private String nom;              // Nom complet
-    private String email;            // Email unique
-    private String motDePasseHash;   // Mot de passe hashé (bcrypt)
-    private long idRole;             // FK vers roles(id_role)
-    private String dateCreation;     // TEXT (SQLite : CURRENT_TIMESTAMP)
+    @DocumentId // L'ID du document Firestore (ex: UID de l'utilisateur)
+    private String id;
 
-    // --- Constructeurs ---
+    private String nom;
+    private String email;
+    // Note : Le mot de passe n'est généralement pas stocké dans Firestore si on utilise Firebase Auth,
+    // mais on peut garder le champ si besoin de compatibilité legacy, ou le retirer.
+    private String motDePasseHash;
+
+    private String idRole; // FK vers la collection roles (String maintenant)
+    private String dateCreation;
+
+    // --- Constructeur vide OBLIGATOIRE pour Firestore ---
     public Utilisateur() {}
 
-    public Utilisateur(long id, String nom, String email,
-                       String motDePasseHash, long idRole, String dateCreation) {
+    public Utilisateur(String id, String nom, String email,
+                       String motDePasseHash, String idRole, String dateCreation) {
         this.id = id;
         this.nom = nom;
         this.email = email;
@@ -28,23 +36,54 @@ public class Utilisateur {
     }
 
     // --- Getters / Setters ---
-    public long getId() { return id; }
-    public void setId(long id) { this.id = id; }
+    public String getId() {
+        return id;
+    }
 
-    public String getNom() { return nom; }
-    public void setNom(String nom) { this.nom = nom; }
+    public void setId(String id) {
+        this.id = id;
+    }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
+    public String getNom() {
+        return nom;
+    }
 
-    public String getMotDePasseHash() { return motDePasseHash; }
-    public void setMotDePasseHash(String motDePasseHash) { this.motDePasseHash = motDePasseHash; }
+    public void setNom(String nom) {
+        this.nom = nom;
+    }
 
-    public long getIdRole() { return idRole; }
-    public void setIdRole(long idRole) { this.idRole = idRole; }
+    public String getEmail() {
+        return email;
+    }
 
-    public String getDateCreation() { return dateCreation; }
-    public void setDateCreation(String dateCreation) { this.dateCreation = dateCreation; }
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getMotDePasseHash() {
+        return motDePasseHash;
+    }
+
+    public void setMotDePasseHash(String motDePasseHash) {
+        this.motDePasseHash = motDePasseHash;
+    }
+
+    // CHANGEMENT MAJEUR : long -> String
+    public String getIdRole() {
+        return idRole;
+    }
+
+    public void setIdRole(String idRole) {
+        this.idRole = idRole;
+    }
+
+    public String getDateCreation() {
+        return dateCreation;
+    }
+
+    public void setDateCreation(String dateCreation) {
+        this.dateCreation = dateCreation;
+    }
 
     // --- Utilitaire ---
     @Override
@@ -52,4 +91,3 @@ public class Utilisateur {
         return nom + " (" + email + ")";
     }
 }
-

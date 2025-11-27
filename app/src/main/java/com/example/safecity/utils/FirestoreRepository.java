@@ -1,8 +1,13 @@
 package com.example.safecity.utils;
 
+import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
+import com.example.safecity.model.Role;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
+import com.google.firebase.storage.FirebaseStorage; // Import Storage
+
 import java.util.List;
 
 public class FirestoreRepository {
@@ -13,7 +18,6 @@ public class FirestoreRepository {
         db = FirebaseFirestore.getInstance();
     }
 
-    // --- Interfaces de Callback ---
     public interface OnFirestoreTaskComplete {
         void onSuccess();
         void onError(Exception e);
@@ -24,57 +28,51 @@ public class FirestoreRepository {
         void onError(Exception e);
     }
 
-    // ============================================================
-    // 1. AJOUTER (CREATE)
-    // ============================================================
+    public interface OnRolesLoadedListener {
+        void onRolesLoaded(List<Role> roles);
+        void onError(Exception e);
+    }
+
+    public interface OnCategoriesLoadedListener {
+        void onCategoriesLoaded(List<Categorie> categories);
+        void onError(Exception e);
+    }
+
+    // 1. AJOUTER
     public void addIncident(Incident incident, OnFirestoreTaskComplete listener) {
         db.collection("incidents")
                 .add(incident)
                 .addOnSuccessListener(documentReference -> {
-                    // 1. On récupère l'ID généré par Firestore
                     String generatedId = documentReference.getId();
-
-                    // 2. On met à jour l'objet Java local
                     incident.setId(generatedId);
-
-                    // 3. IMPORTANT : On met à jour le champ "id" DANS le document Firestore
-                    // Cela permet à toObjects(Incident.class) de remplir l'ID automatiquement plus tard
                     documentReference.update("id", generatedId);
-
                     listener.onSuccess();
                 })
                 .addOnFailureListener(listener::onError);
     }
 
-    // ============================================================
-    // 2. LIRE TOUT EN TEMPS RÉEL (READ ALL)
-    // ============================================================
-    public void getIncidentsRealtime(OnDataLoadListener listener) {
-        db.collection("incidents")
+    // 2. LIRE (Optimisé : Limit 50)
+    public ListenerRegistration getIncidentsRealtime(OnDataLoadListener listener) {
+        return db.collection("incidents")
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
+                .limit(50) // <--- OPTIMISATION : On ne charge que les 50 derniers
                 .addSnapshotListener((snapshots, e) -> {
                     if (e != null) {
                         listener.onError(e);
                         return;
                     }
                     if (snapshots != null) {
-                        // Grâce à l'étape 3 du addIncident, l'ID est mappé automatiquement
                         listener.onIncidentsLoaded(snapshots.toObjects(Incident.class));
                     }
                 });
     }
 
-    // ============================================================
-    // 3. LIRE PAR UTILISATEUR (READ BY USER) - Pour "Mes Incidents"
-    // ============================================================
+    // 3. LIRE MES INCIDENTS
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
-        // Attention : Si vous ajoutez un orderBy("dateSignalement") ici aussi,
-        // Firestore demandera de créer un "Index Composite" (lien dans le Logcat).
-        // Pour l'instant, on filtre juste par utilisateur.
-
         db.collection("incidents")
                 .whereEqualTo("idUtilisateur", userId)
-                .get() // On utilise get() (lecture unique) au lieu de snapshot listener pour simplifier
+                .orderBy("dateSignalement", Query.Direction.DESCENDING) // Si index composite créé
+                .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<Incident> list = queryDocumentSnapshots.toObjects(Incident.class);
                     listener.onIncidentsLoaded(list);
@@ -82,18 +80,55 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // ============================================================
-    // 4. SUPPRIMER (DELETE)
-    // ============================================================
-    public void deleteIncident(String incidentId, OnFirestoreTaskComplete listener) {
+    // 4. SUPPRIMER (Optimisé : Image + Doc)
+    public void deleteIncident(String incidentId, String photoUrl, OnFirestoreTaskComplete listener) {
         if (incidentId == null || incidentId.isEmpty()) {
             listener.onError(new Exception("ID invalide"));
             return;
         }
 
+        // Si il y a une photo, on la supprime du Storage d'abord
+        if (photoUrl != null && !photoUrl.isEmpty()) {
+            try {
+                FirebaseStorage.getInstance()
+                        .getReferenceFromUrl(photoUrl)
+                        .delete()
+                        .addOnSuccessListener(aVoid -> {
+                            // Succès suppression image -> suppression doc
+                            deleteFirestoreDoc(incidentId, listener);
+                        })
+                        .addOnFailureListener(e -> {
+                            // Échec suppression image (peut-être déjà supprimée) -> on force suppression doc
+                            deleteFirestoreDoc(incidentId, listener);
+                        });
+            } catch (Exception e) {
+                // Url malformée ou autre -> on supprime le doc quand même
+                deleteFirestoreDoc(incidentId, listener);
+            }
+        } else {
+            // Pas de photo, suppression directe
+            deleteFirestoreDoc(incidentId, listener);
+        }
+    }
+
+    // Méthode privée helper pour ne pas répéter le code
+    private void deleteFirestoreDoc(String incidentId, OnFirestoreTaskComplete listener) {
         db.collection("incidents").document(incidentId)
                 .delete()
                 .addOnSuccessListener(aVoid -> listener.onSuccess())
                 .addOnFailureListener(listener::onError);
+    }
+
+    // 5. & 6. ROLES ET CATEGORIES (Inchangé)
+    public void getRoles(OnRolesLoadedListener listener) {
+        db.collection("roles").get().addOnSuccessListener(q -> {
+            if (q != null) listener.onRolesLoaded(q.toObjects(Role.class));
+        }).addOnFailureListener(listener::onError);
+    }
+
+    public void getCategories(OnCategoriesLoadedListener listener) {
+        db.collection("categories").orderBy("nomCategorie").get().addOnSuccessListener(q -> {
+            if (q != null) listener.onCategoriesLoaded(q.toObjects(Categorie.class));
+        }).addOnFailureListener(listener::onError);
     }
 }

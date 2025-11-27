@@ -1,29 +1,32 @@
 package com.example.safecity.model;
 
+import com.google.firebase.firestore.DocumentId;
+
 /**
  * Modèle représentant un rôle utilisateur dans SafeCity.
+ * Adapté pour Firestore (ID String).
  * (Admin, Autorité, Citoyen)
- *  Auteur : Asmaa
  */
 public class Role {
 
-    private long id;            // Correspond à id_role
-    private String nomRole;     // Nom du rôle (unique)
+    @DocumentId // Cette annotation permet à Firestore de mapper l'ID du document ici
+    private String id;
+    private String nomRole;
 
-    // --- Constructeurs ---
+    // --- Constructeur vide OBLIGATOIRE pour Firestore ---
     public Role() {}
 
-    public Role(long id, String nomRole) {
+    public Role(String id, String nomRole) {
         this.id = id;
         this.nomRole = nomRole;
     }
 
     // --- Getters / Setters ---
-    public long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -41,4 +44,3 @@ public class Role {
         return nomRole;
     }
 }
-

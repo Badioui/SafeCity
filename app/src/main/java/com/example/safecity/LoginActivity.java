@@ -27,7 +27,7 @@ public class LoginActivity extends AppCompatActivity {
         // 2. Vérification auto : Si l'utilisateur est déjà connecté, on file direct à l'accueil
         if (auth.getCurrentUser() != null) {
             goToMain();
-            return; // On arrête l'exécution ici
+            return;
         }
 
         setContentView(R.layout.activity_login);
@@ -37,6 +37,7 @@ public class LoginActivity extends AppCompatActivity {
         EditText etPass = findViewById(R.id.et_login_password);
         Button btnLogin = findViewById(R.id.btn_login);
         TextView tvRegister = findViewById(R.id.tv_go_to_register);
+        TextView tvForgotPass = findViewById(R.id.tv_forgot_password); // <-- AJOUT
 
         // Click Connexion
         btnLogin.setOnClickListener(v -> {
@@ -48,7 +49,6 @@ public class LoginActivity extends AppCompatActivity {
                 return;
             }
 
-            // Connexion avec Firebase
             loginUser(email, pass);
         });
 
@@ -56,23 +56,42 @@ public class LoginActivity extends AppCompatActivity {
         tvRegister.setOnClickListener(v -> {
             startActivity(new Intent(LoginActivity.this, RegisterActivity.class));
         });
+
+        // --- FONCTIONNALITÉ MOT DE PASSE OUBLIÉ ---
+        tvForgotPass.setOnClickListener(v -> {
+            String email = etEmail.getText().toString().trim();
+
+            if (TextUtils.isEmpty(email)) {
+                etEmail.setError("Entrez votre email ici pour réinitialiser");
+                etEmail.requestFocus();
+                return;
+            }
+
+            // Appel Firebase pour envoyer l'email
+            auth.sendPasswordResetEmail(email)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            Toast.makeText(LoginActivity.this, "Email de réinitialisation envoyé ! Vérifiez vos spams.", Toast.LENGTH_LONG).show();
+                        } else {
+                            String error = task.getException() != null ? task.getException().getMessage() : "Erreur inconnue";
+                            Toast.makeText(LoginActivity.this, "Erreur : " + error, Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        });
     }
 
     private void loginUser(String email, String password) {
-        // On affiche un petit message (ou on pourrait mettre une ProgressBar)
         Toast.makeText(this, "Connexion en cours...", Toast.LENGTH_SHORT).show();
 
         auth.signInWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, task -> {
                     if (task.isSuccessful()) {
-                        // Succès !
                         FirebaseUser user = auth.getCurrentUser();
-                        String nom = (user.getDisplayName() != null) ? user.getDisplayName() : "Utilisateur";
+                        String nom = (user != null && user.getDisplayName() != null) ? user.getDisplayName() : "Utilisateur";
 
                         Toast.makeText(LoginActivity.this, "Bienvenue " + nom, Toast.LENGTH_SHORT).show();
                         goToMain();
                     } else {
-                        // Échec (Mot de passe faux, compte inexistant, pas d'internet...)
                         String error = task.getException() != null ? task.getException().getMessage() : "Erreur inconnue";
                         Toast.makeText(LoginActivity.this, "Erreur : " + error, Toast.LENGTH_LONG).show();
                     }
@@ -81,7 +100,6 @@ public class LoginActivity extends AppCompatActivity {
 
     private void goToMain() {
         Intent intent = new Intent(this, MainActivity.class);
-        // Ces flags empêchent de revenir au login en faisant "Retour" depuis l'accueil
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
