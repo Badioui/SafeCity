@@ -17,7 +17,9 @@ import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 
+import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.Locale;
 
 public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.IncidentViewHolder> {
 
@@ -59,17 +61,29 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         holder.tvDescription.setText(incident.getDescription());
         holder.tvStatus.setText(incident.getStatut());
 
-        // A. Catégorie (Récupérée via JOIN dans le DAO)
-        String catName = incident.getNomCategorie(); // Assurez-vous que ce getter existe dans Incident.java
+        // A. Catégorie
+        String catName = incident.getNomCategorie();
         if (catName == null || catName.isEmpty()) {
             catName = "Non classé";
         }
-        holder.tvCategory.setText(catName + " • " + incident.getDateSignalement());
 
-        // B. Nom de l'utilisateur (Récupéré via JOIN dans le DAO) -> OPTIMISATION MAJEURE
-        // Plus besoin de faire new UserDAO() ici !
-        if (incident.getUserName() != null && !incident.getUserName().isEmpty()) {
-            holder.tvUsername.setText(incident.getUserName());
+        // --- FORMATAGE DE LA DATE ---
+        String dateAffichee = "Date inconnue";
+        // On suppose ici que incident.getDateSignalement() retourne un objet java.util.Date
+        if (incident.getDateSignalement() != null) {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault());
+            dateAffichee = sdf.format(incident.getDateSignalement());
+        }
+
+        // Affichage "Catégorie • Date"
+        holder.tvCategory.setText(catName + " • " + dateAffichee);
+
+        // B. Nom de l'utilisateur
+        // On utilise getNomUtilisateur() ou getUserName() selon votre modèle.
+        // Ici je garde la logique précédente mais vérifiez le nom du getter dans Incident.java.
+        String userName = incident.getNomUtilisateur(); // ou incident.getUserName()
+        if (userName != null && !userName.isEmpty()) {
+            holder.tvUsername.setText(userName);
         } else {
             holder.tvUsername.setText("Citoyen #" + incident.getIdUtilisateur());
         }
@@ -90,8 +104,6 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         } else {
             // Image par défaut si pas de photo
             holder.imgPhoto.setImageResource(R.drawable.ic_incident_placeholder);
-            // On peut remettre un tint gris si c'est le placeholder
-            // holder.imgPhoto.setColorFilter(ContextCompat.getColor(context, R.color.grey_400));
         }
 
         // --- GESTION DES BOUTONS (Visibilité selon le contexte) ---
@@ -110,7 +122,7 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
 
             // Optionnel : On peut quand même laisser le bouton MAP actif
             holder.btnMap.setOnClickListener(v -> {
-                // Action simple ou vide
+                // Action simple ou vide, ou ouvrir la map globale
             });
         }
     }

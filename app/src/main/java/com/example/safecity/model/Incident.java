@@ -1,5 +1,5 @@
 package com.example.safecity.model;
-
+import java.util.Date;
 /**
  * Modèle représentant un incident signalé par un citoyen.
  * Adapté pour Firebase Firestore (IDs en String).
@@ -24,7 +24,7 @@ public class Incident {
 
     private double latitude;         // latitude
     private double longitude;        // longitude
-    private String dateSignalement;  // Date formatée
+    private Date  dateSignalement;  // Date formatée
     private String statut;           // Nouveau / En cours / Traité
 
     private String idUtilisateur;    // FK vers collection users (Auth UID)
@@ -41,7 +41,7 @@ public class Incident {
     // --- Constructeur Complet ---
     public Incident(String id, String photoUrl, String description,
                     String idCategorie, double latitude, double longitude,
-                    String dateSignalement, String statut, String idUtilisateur) {
+                    Date dateSignalement, String statut, String idUtilisateur) {
         this.id = id;
         this.photoUrl = photoUrl;
         this.description = description;
@@ -75,8 +75,8 @@ public class Incident {
     public double getLongitude() { return longitude; }
     public void setLongitude(double longitude) { this.longitude = longitude; }
 
-    public String getDateSignalement() { return dateSignalement; }
-    public void setDateSignalement(String dateSignalement) { this.dateSignalement = dateSignalement; }
+    public  Date getDateSignalement() { return dateSignalement; }
+    public void setDateSignalement(Date dateSignalement) { this.dateSignalement = dateSignalement; }
 
     public String getStatut() { return statut; }
     public void setStatut(String statut) { this.statut = statut; }

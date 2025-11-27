@@ -223,7 +223,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         // Dates et Statut (si nouvel incident)
         if (editingIncidentId == null) {
             incident.setStatut(Incident.STATUT_NOUVEAU);
-            incident.setDateSignalement(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date()));
+            incident.setDateSignalement(new Date());
         }
 
         // --- ENVOI VERS FIREBASE ---
