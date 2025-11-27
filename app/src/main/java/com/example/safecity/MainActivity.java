@@ -27,9 +27,15 @@ import com.example.safecity.ui.fragments.MapFragment;
 import com.example.safecity.ui.fragments.SignalementFragment;
 import com.example.safecity.ui.fragments.ProfileFragment;
 
+
 public class MainActivity extends AppCompatActivity {
 
+    // CORRECTION : Définir une valeur pour l'ID du canal (doit correspondre à l'ID utilisé dans votre service FCM ou ailleurs pour la config OREO+)
+    public static final String CHANNEL_ID = "high_priority_channel"; // <--- AJOUTEZ VOTRE ID ICI (exemple : "high_priority_channel")
+
     private BottomNavigationView bottomNav;
+
+
     private ImageButton btnSearch;
 
     @Override
