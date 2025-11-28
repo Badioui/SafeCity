@@ -59,7 +59,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         // Note: Assurez-vous que l'ID dans fragment_map.xml est bien "map" ou "map_fragment_view"
         // Si vous utilisez <fragment ... android:id="@+id/map" ... /> gardez R.id.map
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
-                .findFragmentById(R.id.map);
+                .findFragmentById(R.id.map_fragment_view);
 
         // Si votre ID est map_fragment_view, décommentez la ligne ci-dessous :
         // SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map_fragment_view);
