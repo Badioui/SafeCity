@@ -33,7 +33,7 @@ import com.bumptech.glide.Glide;
 import com.example.safecity.R;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
-import com.example.safecity.utils.AppExecutors; // Import AppExecutors
+import com.example.safecity.utils.AppExecutors;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.utils.ImageUtils;
 import com.example.safecity.utils.LocationHelper;
@@ -220,7 +220,14 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             @Override
             public void onSuccess() {
                 if (isAdded()) {
-                    Toast.makeText(getContext(), "Envoyé !", Toast.LENGTH_SHORT).show();
+                    // --- GAMIFICATION : AJOUTER 10 POINTS ---
+                    FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                    if (user != null) {
+                        firestoreRepo.incrementUserScore(user.getUid(), 10);
+                    }
+                    // ----------------------------------------
+
+                    Toast.makeText(getContext(), "Envoyé ! (+10 pts)", Toast.LENGTH_SHORT).show();
                     getParentFragmentManager().popBackStack();
                 }
             }

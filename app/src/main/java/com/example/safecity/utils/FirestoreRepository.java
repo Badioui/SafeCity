@@ -3,7 +3,8 @@ package com.example.safecity.utils;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
 import com.example.safecity.model.Role;
-import com.example.safecity.model.Utilisateur; // Import ajouté
+import com.example.safecity.model.Utilisateur;
+import com.google.firebase.firestore.FieldValue; // Import ajouté pour l'incrémentation
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
@@ -39,7 +40,6 @@ public class FirestoreRepository {
         void onError(Exception e);
     }
 
-    // Nouvelle interface pour le chargement de l'utilisateur
     public interface OnUserLoadedListener {
         void onUserLoaded(Utilisateur utilisateur);
         void onError(Exception e);
@@ -58,7 +58,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // NOUVELLE MÉTHODE : Mettre à jour le statut d'un incident (Validation)
+    // 2. METTRE À JOUR STATUT INCIDENT (Validation)
     public void updateIncidentStatus(String incidentId, String newStatus, OnFirestoreTaskComplete listener) {
         db.collection("incidents").document(incidentId)
                 .update("statut", newStatus)
@@ -66,11 +66,21 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 2. LIRE (Optimisé : Limit 50)
+    // NOUVELLE MÉTHODE : Incrémenter le score (Gamification)
+    public void incrementUserScore(String userId, int points) {
+        if (userId == null) return;
+        db.collection("users").document(userId)
+                .update("score", FieldValue.increment(points))
+                .addOnFailureListener(e -> {
+                    // Gestion silencieuse ou log (ex: Log.e("Firestore", "Error updating score", e));
+                });
+    }
+
+    // 3. LIRE (Optimisé : Limit 50)
     public ListenerRegistration getIncidentsRealtime(OnDataLoadListener listener) {
         return db.collection("incidents")
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
-                .limit(50) // <--- OPTIMISATION : On ne charge que les 50 derniers
+                .limit(50)
                 .addSnapshotListener((snapshots, e) -> {
                     if (e != null) {
                         listener.onError(e);
@@ -82,7 +92,7 @@ public class FirestoreRepository {
                 });
     }
 
-    // 3. LIRE MES INCIDENTS
+    // 4. LIRE MES INCIDENTS
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
         db.collection("incidents")
                 .whereEqualTo("idUtilisateur", userId)
@@ -95,7 +105,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // NOUVELLE MÉTHODE : Récupérer un utilisateur par son UID
+    // 5. RÉCUPÉRER UN UTILISATEUR
     public void getUser(String uid, OnUserLoadedListener listener) {
         db.collection("users").document(uid).get()
                 .addOnSuccessListener(documentSnapshot -> {
@@ -108,38 +118,28 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 4. SUPPRIMER (Optimisé : Image + Doc)
+    // 6. SUPPRIMER (Optimisé : Image + Doc)
     public void deleteIncident(String incidentId, String photoUrl, OnFirestoreTaskComplete listener) {
         if (incidentId == null || incidentId.isEmpty()) {
             listener.onError(new Exception("ID invalide"));
             return;
         }
 
-        // Si il y a une photo, on la supprime du Storage d'abord
         if (photoUrl != null && !photoUrl.isEmpty()) {
             try {
                 FirebaseStorage.getInstance()
                         .getReferenceFromUrl(photoUrl)
                         .delete()
-                        .addOnSuccessListener(aVoid -> {
-                            // Succès suppression image -> suppression doc
-                            deleteFirestoreDoc(incidentId, listener);
-                        })
-                        .addOnFailureListener(e -> {
-                            // Échec suppression image (peut-être déjà supprimée) -> on force suppression doc
-                            deleteFirestoreDoc(incidentId, listener);
-                        });
+                        .addOnSuccessListener(aVoid -> deleteFirestoreDoc(incidentId, listener))
+                        .addOnFailureListener(e -> deleteFirestoreDoc(incidentId, listener));
             } catch (Exception e) {
-                // Url malformée ou autre -> on supprime le doc quand même
                 deleteFirestoreDoc(incidentId, listener);
             }
         } else {
-            // Pas de photo, suppression directe
             deleteFirestoreDoc(incidentId, listener);
         }
     }
 
-    // Méthode privée helper pour ne pas répéter le code
     private void deleteFirestoreDoc(String incidentId, OnFirestoreTaskComplete listener) {
         db.collection("incidents").document(incidentId)
                 .delete()
@@ -147,7 +147,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 5. & 6. ROLES ET CATEGORIES
+    // 7. & 8. ROLES ET CATEGORIES
     public void getRoles(OnRolesLoadedListener listener) {
         db.collection("roles").get().addOnSuccessListener(q -> {
             if (q != null) listener.onRolesLoaded(q.toObjects(Role.class));

@@ -4,9 +4,7 @@ import com.google.firebase.firestore.DocumentId;
 
 /**
  * Modèle représentant un utilisateur (citoyen, autorité ou admin).
- * Adapté pour Firestore :
- * - id est maintenant une String (correspond souvent à l'UID Firebase Auth)
- * - idRole est maintenant une String (référence au document Role)
+ * Adapté pour Firestore.
  */
 public class Utilisateur {
 
@@ -15,15 +13,17 @@ public class Utilisateur {
 
     private String nom;
     private String email;
-    // Note : Le mot de passe n'est généralement pas stocké dans Firestore si on utilise Firebase Auth,
-    // mais on peut garder le champ si besoin de compatibilité legacy, ou le retirer.
-    private String motDePasseHash;
-
-    private String idRole; // FK vers la collection roles (String maintenant)
+    private String motDePasseHash; // Optionnel avec Firebase Auth
+    private String idRole; // FK vers la collection roles
     private String dateCreation;
 
+    // NOUVEAU CHAMP : Score de gamification
+    private int score;
+
     // --- Constructeur vide OBLIGATOIRE pour Firestore ---
-    public Utilisateur() {}
+    public Utilisateur() {
+        this.score = 0; // Valeur par défaut
+    }
 
     public Utilisateur(String id, String nom, String email,
                        String motDePasseHash, String idRole, String dateCreation) {
@@ -33,6 +33,7 @@ public class Utilisateur {
         this.motDePasseHash = motDePasseHash;
         this.idRole = idRole;
         this.dateCreation = dateCreation;
+        this.score = 0; // Initialisation par défaut
     }
 
     // --- Getters / Setters ---
@@ -68,7 +69,6 @@ public class Utilisateur {
         this.motDePasseHash = motDePasseHash;
     }
 
-    // CHANGEMENT MAJEUR : long -> String
     public String getIdRole() {
         return idRole;
     }
@@ -85,9 +85,27 @@ public class Utilisateur {
         this.dateCreation = dateCreation;
     }
 
+    // --- GESTION DU SCORE (GAMIFICATION) ---
+
+    public int getScore() {
+        return score;
+    }
+
+    public void setScore(int score) {
+        this.score = score;
+    }
+
+    // Méthode utilitaire pour déterminer le grade
+    public String getGrade() {
+        if (score < 50) return "Novice";
+        if (score < 100) return "Éclaireur";
+        if (score < 500) return "Gardien";
+        return "Héros de la Cité";
+    }
+
     // --- Utilitaire ---
     @Override
     public String toString() {
-        return nom + " (" + email + ")";
+        return nom + " (" + email + ") - " + getGrade();
     }
 }

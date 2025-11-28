@@ -6,8 +6,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/light_bg_primary"
-    android:fitsSystemWindows="true" tools:context=".MainActivity">
+    android:fitsSystemWindows="true"
+    tools:context=".MainActivity">
 
+    <!-- Barre supérieure -->
     <LinearLayout
         android:id="@+id/top_bar"
         android:layout_width="match_parent"
@@ -45,6 +47,7 @@
 
     </LinearLayout>
 
+    <!-- Conteneur des Fragments -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/nav_host_fragment"
         android:layout_width="0dp"
@@ -54,6 +57,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/top_bar" />
 
+    <!-- BOUTON SOS (Flottant) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btn_sos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@android:drawable/ic_lock_power_off"
+        app:backgroundTint="#D50000"
+        app:tint="@android:color/white"
+        android:contentDescription="SOS Urgence"
+        app:layout_constraintBottom_toTopOf="@id/bottom_nav_bar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Barre de Navigation -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_nav_bar"
         android:layout_width="match_parent"

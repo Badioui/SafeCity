@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.safecity.LoginActivity;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
+import com.example.safecity.model.Utilisateur; // Import Utilisateur
 import com.example.safecity.ui.adapters.IncidentAdapter;
 import com.example.safecity.utils.FirestoreRepository;
 import com.google.firebase.auth.FirebaseAuth;
@@ -28,7 +29,7 @@ import java.util.List;
 
 public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
-    private TextView tvName, tvEmail;
+    private TextView tvName, tvEmail, tvScore; // Ajout tvScore
     private Button btnLogout;
     private RecyclerView recyclerView;
     private FirestoreRepository firestoreRepo;
@@ -47,10 +48,12 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
         tvName = view.findViewById(R.id.tv_profile_name);
         tvEmail = view.findViewById(R.id.tv_profile_email);
+        tvScore = view.findViewById(R.id.tv_profile_score); // Initialisation
         btnLogout = view.findViewById(R.id.btn_logout);
         recyclerView = view.findViewById(R.id.recycler_profile_incidents);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        // On initialise l'adapter
         adapter = new IncidentAdapter(getContext(), new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
 
@@ -80,12 +83,33 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
+        // 1. Infos de base Auth
         String name = user.getDisplayName();
         String email = user.getEmail();
 
         tvName.setText(name != null && !name.isEmpty() ? name : "Utilisateur");
         tvEmail.setText(email != null ? email : "Email masqué");
 
+        // 2. Récupérer les infos détaillées (Score, Grade, Rôle) depuis Firestore
+        firestoreRepo.getUser(user.getUid(), new FirestoreRepository.OnUserLoadedListener() {
+            @Override
+            public void onUserLoaded(Utilisateur utilisateur) {
+                if (isAdded() && utilisateur != null) {
+                    // Mise à jour de l'affichage du score
+                    tvScore.setText("Score : " + utilisateur.getScore() + " pts (" + utilisateur.getGrade() + ")");
+
+                    // On met à jour l'adaptateur avec le rôle pour activer les boutons d'édition/suppression
+                    adapter.setCurrentUser(user.getUid(), utilisateur.getIdRole());
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                // Erreur silencieuse, on garde les valeurs par défaut
+            }
+        });
+
+        // 3. Récupérer mes incidents
         firestoreRepo.getMyIncidents(user.getUid(), new FirestoreRepository.OnDataLoadListener() {
             @Override
             public void onIncidentsLoaded(List<Incident> incidents) {
@@ -109,7 +133,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         });
     }
 
-    // --- ACTIONS ---
+    // --- ACTIONS DE L'ADAPTATEUR ---
 
     @Override
     public void onMapClick(Incident incident) {
@@ -118,6 +142,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
     @Override
     public void onEditClick(Incident incident) {
+        // Ouvrir le fragment de signalement en mode édition (avec l'ID)
         Fragment fragment = SignalementFragment.newInstance(incident.getId());
         getParentFragmentManager().beginTransaction()
                 .replace(R.id.nav_host_fragment, fragment)
@@ -127,13 +152,13 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
     @Override
     public void onDeleteClick(Incident incident) {
-        // --- MISE A JOUR ICI : On passe l'URL de la photo en plus de l'ID ---
+        // Suppression avec gestion de l'image
         firestoreRepo.deleteIncident(incident.getId(), incident.getPhotoUrl(), new FirestoreRepository.OnFirestoreTaskComplete() {
             @Override
             public void onSuccess() {
                 if (isAdded()) {
-                    Toast.makeText(getContext(), "Incident et photo supprimés !", Toast.LENGTH_SHORT).show();
-                    loadProfileData();
+                    Toast.makeText(getContext(), "Incident supprimé !", Toast.LENGTH_SHORT).show();
+                    loadProfileData(); // Recharger la liste
                 }
             }
 
@@ -144,5 +169,11 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 }
             }
         });
+    }
+
+    @Override
+    public void onValidateClick(Incident incident) {
+        // Dans le profil, le bouton valider n'est généralement pas visible (sauf si admin regarde ses propres posts)
+        // On peut laisser vide ou mettre un Toast
     }
 }

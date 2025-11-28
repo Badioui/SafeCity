@@ -143,7 +143,7 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
             if (context instanceof MainActivity) {
                 ((MainActivity) context).navigateToMapAndFocus(incident.getLatitude(), incident.getLongitude());
             } else {
-                Toast.makeText(context, "Lat: " + incident.getLatitude(), ", Lon: " + incident.getLongitude(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(context, "Lat: " + incident.getLatitude() + ", Lon: " + incident.getLongitude(), Toast.LENGTH_SHORT).show();
             }
         });
     }

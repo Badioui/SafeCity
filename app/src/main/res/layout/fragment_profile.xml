@@ -51,6 +51,17 @@
                     android:text="..."
                     android:textSize="14sp"
                     android:textColor="#757575"
+                    android:layout_marginBottom="4dp"/>
+
+                <!-- SCORE ET GRADE -->
+                <TextView
+                    android:id="@+id/tv_profile_score"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Score : 0 pts (Novice)"
+                    android:textColor="@color/design_default_color_primary"
+                    android:textStyle="bold"
+                    android:layout_marginTop="4dp"
                     android:layout_marginBottom="16dp"/>
 
                 <Button

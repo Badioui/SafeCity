@@ -3,6 +3,7 @@ package com.example.safecity;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri; // Import pour l'appel téléphonique
 import android.os.Build;
 import android.os.Bundle;
 import android.view.ViewGroup;
@@ -18,6 +19,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.floatingactionbutton.FloatingActionButton; // Import du bouton flottant
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -26,12 +28,13 @@ import com.example.safecity.ui.fragments.HomeFragment;
 import com.example.safecity.ui.fragments.MapFragment;
 import com.example.safecity.ui.fragments.SignalementFragment;
 import com.example.safecity.ui.fragments.ProfileFragment;
-import com.example.safecity.ui.fragments.NotificationsFragment; // <--- NOUVEL IMPORT
+import com.example.safecity.ui.fragments.NotificationsFragment;
 
 public class MainActivity extends AppCompatActivity {
 
     private BottomNavigationView bottomNav;
     private ImageButton btnSearch;
+    private FloatingActionButton btnSos; // Référence au bouton SOS
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,8 +44,6 @@ public class MainActivity extends AppCompatActivity {
         // ==================================================================
         // 1. GESTION DES NOTIFICATIONS (ABONNEMENT + PERMISSIONS)
         // ==================================================================
-
-        // A. S'abonner au canal global "incidents_all"
         FirebaseMessaging.getInstance().subscribeToTopic("incidents_all")
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
@@ -50,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
 
-        // B. Demander la permission explicite sur Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
@@ -58,7 +58,23 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ==================================================================
-        // 2. GESTION DE L'INTERFACE (NAVIGATION)
+        // 2. LOGIQUE SOS (NOUVEAU)
+        // ==================================================================
+        btnSos = findViewById(R.id.btn_sos);
+
+        // Action au clic simple : Avertissement (éviter les fausses manips)
+        btnSos.setOnClickListener(v -> {
+            Toast.makeText(this, "Maintenez appuyé pour appeler les secours (19)", Toast.LENGTH_SHORT).show();
+        });
+
+        // Action au clic long : Lancer l'alerte
+        btnSos.setOnLongClickListener(v -> {
+            lancerAppelUrgence();
+            return true; // "true" indique que l'événement est consommé (pas de clic simple après)
+        });
+
+        // ==================================================================
+        // 3. GESTION DE L'INTERFACE (NAVIGATION)
         // ==================================================================
 
         bottomNav = findViewById(R.id.bottom_nav_bar);
@@ -78,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 selectedFragment = new SignalementFragment();
             } else if (itemId == R.id.nav_activity) {
-                // MODIFICATION : Ouvre le fragment Notifications
                 selectedFragment = new NotificationsFragment();
             } else if (itemId == R.id.nav_profile) {
                 selectedFragment = new ProfileFragment();
@@ -103,6 +118,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // --- MÉTHODE D'URGENCE ---
+    private void lancerAppelUrgence() {
+        // Appeler le 19 (Police Maroc) ou 112 (International)
+        Uri number = Uri.parse("tel:19");
+        Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
+        try {
+            startActivity(callIntent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Impossible de lancer l'appel.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // --- MÉTHODES DE RECHERCHE ET NAVIGATION ---
     private void showSearchDialog() {
         final EditText searchInput = new EditText(this);
         searchInput.setHint("Ex: Vol, Accident, Rue X...");
