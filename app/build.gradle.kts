@@ -72,4 +72,5 @@ dependencies {
     implementation("com.google.firebase:firebase-storage")
 
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.maps.android:android-maps-utils:2.3.0")
 }

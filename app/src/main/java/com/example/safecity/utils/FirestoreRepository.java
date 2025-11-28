@@ -3,10 +3,11 @@ package com.example.safecity.utils;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
 import com.example.safecity.model.Role;
+import com.example.safecity.model.Utilisateur; // Import ajouté
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
-import com.google.firebase.storage.FirebaseStorage; // Import Storage
+import com.google.firebase.storage.FirebaseStorage;
 
 import java.util.List;
 
@@ -38,7 +39,13 @@ public class FirestoreRepository {
         void onError(Exception e);
     }
 
-    // 1. AJOUTER
+    // Nouvelle interface pour le chargement de l'utilisateur
+    public interface OnUserLoadedListener {
+        void onUserLoaded(Utilisateur utilisateur);
+        void onError(Exception e);
+    }
+
+    // 1. AJOUTER INCIDENT
     public void addIncident(Incident incident, OnFirestoreTaskComplete listener) {
         db.collection("incidents")
                 .add(incident)
@@ -48,6 +55,14 @@ public class FirestoreRepository {
                     documentReference.update("id", generatedId);
                     listener.onSuccess();
                 })
+                .addOnFailureListener(listener::onError);
+    }
+
+    // NOUVELLE MÉTHODE : Mettre à jour le statut d'un incident (Validation)
+    public void updateIncidentStatus(String incidentId, String newStatus, OnFirestoreTaskComplete listener) {
+        db.collection("incidents").document(incidentId)
+                .update("statut", newStatus)
+                .addOnSuccessListener(aVoid -> listener.onSuccess())
                 .addOnFailureListener(listener::onError);
     }
 
@@ -71,11 +86,24 @@ public class FirestoreRepository {
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
         db.collection("incidents")
                 .whereEqualTo("idUtilisateur", userId)
-                .orderBy("dateSignalement", Query.Direction.DESCENDING) // Si index composite créé
+                .orderBy("dateSignalement", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<Incident> list = queryDocumentSnapshots.toObjects(Incident.class);
                     listener.onIncidentsLoaded(list);
+                })
+                .addOnFailureListener(listener::onError);
+    }
+
+    // NOUVELLE MÉTHODE : Récupérer un utilisateur par son UID
+    public void getUser(String uid, OnUserLoadedListener listener) {
+        db.collection("users").document(uid).get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        listener.onUserLoaded(documentSnapshot.toObject(Utilisateur.class));
+                    } else {
+                        listener.onError(new Exception("Utilisateur introuvable"));
+                    }
                 })
                 .addOnFailureListener(listener::onError);
     }
@@ -119,7 +147,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 5. & 6. ROLES ET CATEGORIES (Inchangé)
+    // 5. & 6. ROLES ET CATEGORIES
     public void getRoles(OnRolesLoadedListener listener) {
         db.collection("roles").get().addOnSuccessListener(q -> {
             if (q != null) listener.onRolesLoaded(q.toObjects(Role.class));

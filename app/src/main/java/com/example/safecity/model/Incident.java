@@ -1,11 +1,16 @@
 package com.example.safecity.model;
+
+import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.clustering.ClusterItem; // Import nécessaire pour le clustering
+
 import java.util.Date;
+
 /**
  * Modèle représentant un incident signalé par un citoyen.
- * Adapté pour Firebase Firestore (IDs en String).
+ * Adapté pour Firebase Firestore et le Clustering Google Maps.
  * Auteur : Asmaa
  */
-public class Incident {
+public class Incident implements ClusterItem { // Implements ClusterItem ajouté
 
     // --- Constantes de statut ---
     public static final String STATUT_NOUVEAU = "Nouveau";
@@ -13,29 +18,23 @@ public class Incident {
     public static final String STATUT_TRAITE = "Traité";
 
     // --- Champs ---
-    // Firestore utilise des Strings pour les IDs (Document ID)
     private String id;               // id_incident (Firestore Document ID)
-
     private String photoUrl;         // photo_url
     private String description;      // description
-
-    // Les clés étrangères deviennent des Strings car les IDs cibles sont des Strings dans Firestore
     private String idCategorie;      // FK vers collection categories
-
     private double latitude;         // latitude
     private double longitude;        // longitude
-    private Date  dateSignalement;  // Date formatée
+    private Date dateSignalement;    // Date formatée
     private String statut;           // Nouveau / En cours / Traité
-
     private String idUtilisateur;    // FK vers collection users (Auth UID)
 
-    private String userName;
     private String nomCategorie;
     private String nomUtilisateur;
+    // Note: 'userName' semblait redondant avec 'nomUtilisateur', je garde les deux pour compatibilité
+    private String userName;
 
     // --- Constructeur Vide (OBLIGATOIRE POUR FIREBASE) ---
     public Incident() {
-        // Firebase a besoin de ce constructeur vide pour reconstruire l'objet
     }
 
     // --- Constructeur Complet ---
@@ -55,7 +54,6 @@ public class Incident {
 
     // --- Getters / Setters ---
 
-    // ID est maintenant un String
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
@@ -65,7 +63,6 @@ public class Incident {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    // Categorie ID est maintenant un String
     public String getIdCategorie() { return idCategorie; }
     public void setIdCategorie(String idCategorie) { this.idCategorie = idCategorie; }
 
@@ -75,13 +72,12 @@ public class Incident {
     public double getLongitude() { return longitude; }
     public void setLongitude(double longitude) { this.longitude = longitude; }
 
-    public  Date getDateSignalement() { return dateSignalement; }
+    public Date getDateSignalement() { return dateSignalement; }
     public void setDateSignalement(Date dateSignalement) { this.dateSignalement = dateSignalement; }
 
     public String getStatut() { return statut; }
     public void setStatut(String statut) { this.statut = statut; }
 
-    // Utilisateur ID est maintenant un String (UID)
     public String getIdUtilisateur() { return idUtilisateur; }
     public void setIdUtilisateur(String idUtilisateur) { this.idUtilisateur = idUtilisateur; }
 
@@ -103,5 +99,29 @@ public class Incident {
     public String toString() {
         return "[" + statut + "] " + description + " (" + latitude + "," + longitude + ")";
     }
-}
 
+    // =================================================================
+    // IMPLÉMENTATION DE L'INTERFACE ClusterItem
+    // Ces méthodes sont utilisées par le ClusterManager pour placer les marqueurs
+    // =================================================================
+
+    @Override
+    public LatLng getPosition() {
+        return new LatLng(latitude, longitude);
+    }
+
+    @Override
+    public String getTitle() {
+        // Le titre du marqueur sera le nom de la catégorie (ex: "Accident")
+        return nomCategorie != null ? nomCategorie : "Incident";
+    }
+
+    @Override
+    public String getSnippet() {
+        // Le sous-titre du marqueur sera la description
+        return description;
+    }
+
+    // Note: getZIndex() est optionnel selon la version de la librairie,
+    // par défaut il retourne null/0.0f si non implémenté.
+}

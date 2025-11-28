@@ -2,7 +2,6 @@ package com.example.safecity.ui.fragments;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.location.Location;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,27 +20,31 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.material.chip.ChipGroup;
+import com.google.maps.android.clustering.ClusterManager; // <--- Import ClusterManager
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MapFragment extends Fragment implements OnMapReadyCallback {
 
     private GoogleMap googleMap;
     private FirestoreRepository firestoreRepo;
+    private ClusterManager<Incident> clusterManager; // <--- Gestionnaire de clusters
 
     // Variables pour stocker la position cible reçue en argument
     private Double targetLat = null;
     private Double targetLng = null;
 
+    // Champs pour le filtrage
+    private List<Incident> allIncidents = new ArrayList<>();
+    private ChipGroup chipGroup;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // 1. On récupère les arguments passés par MainActivity (s'il y en a)
         if (getArguments() != null) {
-            // On vérifie si les clés existent pour éviter les valeurs par défaut (0.0)
             if (getArguments().containsKey("focus_lat")) {
                 targetLat = getArguments().getDouble("focus_lat");
                 targetLng = getArguments().getDouble("focus_lng");
@@ -56,67 +59,74 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
 
         firestoreRepo = new FirestoreRepository();
 
-        // Note: Assurez-vous que l'ID dans fragment_map.xml est bien "map" ou "map_fragment_view"
-        // Si vous utilisez <fragment ... android:id="@+id/map" ... /> gardez R.id.map
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map_fragment_view);
-
-        // Si votre ID est map_fragment_view, décommentez la ligne ci-dessous :
-        // SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map_fragment_view);
 
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
+
+        // --- GESTION DES CLICS SUR LES FILTRES (CHIPS) ---
+        chipGroup = view.findViewById(R.id.chip_group_filters);
+        chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.chip_all) {
+                updateMapMarkers(allIncidents);
+            } else if (checkedId == R.id.chip_accident) {
+                filterMarkers("Accident");
+            } else if (checkedId == R.id.chip_vol) {
+                filterMarkers("Vol");
+            } else if (checkedId == R.id.chip_travaux) {
+                filterMarkers("Travaux");
+            } else if (checkedId == R.id.chip_incendie) {
+                filterMarkers("Incendie");
+            }
+        });
     }
 
     @Override
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
 
-        // 2. Gestion de la position initiale de la caméra
+        // Position initiale
         if (targetLat != null && targetLng != null) {
-            // Cas A : On a reçu une demande de focus (clic depuis la liste)
             LatLng target = new LatLng(targetLat, targetLng);
-            this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16)); // Zoom fort
+            this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16));
         } else {
-            // Cas B : Ouverture normale (Maroc / Oujda)
             LatLng defaultLocation = new LatLng(34.6814, -1.9076);
             this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultLocation, 12));
         }
 
         this.googleMap.getUiSettings().setZoomControlsEnabled(true);
 
+        // --- CONFIGURATION DU CLUSTER MANAGER ---
+        // 1. Initialiser le ClusterManager avec le contexte et la carte
+        clusterManager = new ClusterManager<>(getContext(), googleMap);
+
+        // 2. Déléguer les événements de la carte au ClusterManager
+        // C'est lui qui va gérer le zoom et les clics sur les marqueurs maintenant
+        googleMap.setOnCameraIdleListener(clusterManager);
+        googleMap.setOnMarkerClickListener(clusterManager);
+
+        // (Optionnel) Ajout d'une info-bulle ou action au clic sur un incident individuel
+        // clusterManager.setOnClusterItemClickListener(incident -> { ... });
+
         enableUserLocation();
-        loadIncidentMarkers();
+        loadIncidentMarkers(); // Chargement initial des données
     }
 
-    /**
-     * Charge les incidents depuis Firestore en temps réel.
-     */
     private void loadIncidentMarkers() {
         firestoreRepo.getIncidentsRealtime(new FirestoreRepository.OnDataLoadListener() {
             @Override
             public void onIncidentsLoaded(List<Incident> incidents) {
-                if (isAdded() && getActivity() != null && googleMap != null) {
+                allIncidents = incidents;
 
-                    googleMap.clear();
-
-                    for (Incident inc : incidents) {
-                        // Filtrer les coordonnées invalides (0,0)
-                        if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
-                            continue;
-                        }
-
-                        LatLng position = new LatLng(inc.getLatitude(), inc.getLongitude());
-
-                        googleMap.addMarker(new MarkerOptions()
-                                .position(position)
-                                .title(inc.getNomCategorie() != null ? inc.getNomCategorie() : "Incident")
-                                .snippet(inc.getDescription())
-                                // Optionnel : icône standard rouge
-                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
-                    }
-                }
+                // Ré-appliquer le filtre actuel si nécessaire
+                int checkedId = chipGroup.getCheckedChipId();
+                if (checkedId == R.id.chip_accident) filterMarkers("Accident");
+                else if (checkedId == R.id.chip_vol) filterMarkers("Vol");
+                else if (checkedId == R.id.chip_travaux) filterMarkers("Travaux");
+                else if (checkedId == R.id.chip_incendie) filterMarkers("Incendie");
+                else updateMapMarkers(allIncidents);
             }
 
             @Override
@@ -128,9 +138,42 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    private void filterMarkers(String categoryName) {
+        List<Incident> filteredList = new ArrayList<>();
+        if (allIncidents != null) {
+            for (Incident inc : allIncidents) {
+                if (inc.getNomCategorie() != null &&
+                        inc.getNomCategorie().toLowerCase().contains(categoryName.toLowerCase())) {
+                    filteredList.add(inc);
+                }
+            }
+        }
+        updateMapMarkers(filteredList);
+    }
+
+    // --- MISE À JOUR VIA CLUSTER MANAGER ---
+    private void updateMapMarkers(List<Incident> incidentsToDisplay) {
+        if (googleMap == null || incidentsToDisplay == null || clusterManager == null) return;
+
+        // 1. On nettoie les items du ClusterManager (pas googleMap.clear())
+        clusterManager.clearItems();
+
+        for (Incident inc : incidentsToDisplay) {
+            // Filtrer les coordonnées invalides
+            if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
+                continue;
+            }
+
+            // 2. On ajoute l'incident (qui est un ClusterItem) au manager
+            clusterManager.addItem(inc);
+        }
+
+        // 3. On force le recalcul des clusters
+        clusterManager.cluster();
+    }
+
     public void enableUserLocation() {
         if (getContext() == null) return;
-
         if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
             if (googleMap != null) {
@@ -140,16 +183,11 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
-    /**
-     * METHODE PUBLIQUE appelée par MainActivity pour forcer le focus
-     */
     public void focusOnLocation(double lat, double lng) {
         if (googleMap != null) {
             LatLng pos = new LatLng(lat, lng);
-            // Animation fluide vers la position
             googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16));
         } else {
-            // Si la carte n'est pas encore prête, on stocke les coords pour onMapReady
             targetLat = lat;
             targetLng = lng;
         }

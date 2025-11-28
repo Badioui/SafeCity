@@ -1,9 +1,9 @@
 package com.example.safecity;
 
-import android.Manifest; // Pour les permissions
+import android.Manifest;
 import android.content.Intent;
-import android.content.pm.PackageManager; // Pour vérifier les permissions
-import android.os.Build; // Pour vérifier la version Android
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.ViewGroup;
 import android.widget.EditText;
@@ -13,19 +13,20 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat; // Pour demander les permissions
-import androidx.core.content.ContextCompat; // Pour vérifier les permissions compat
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.messaging.FirebaseMessaging; // <--- IMPORT CRUCIAL POUR FCM
+import com.google.firebase.messaging.FirebaseMessaging;
 
 // Imports de vos fragments
 import com.example.safecity.ui.fragments.HomeFragment;
 import com.example.safecity.ui.fragments.MapFragment;
 import com.example.safecity.ui.fragments.SignalementFragment;
 import com.example.safecity.ui.fragments.ProfileFragment;
+import com.example.safecity.ui.fragments.NotificationsFragment; // <--- NOUVEL IMPORT
 
 public class MainActivity extends AppCompatActivity {
 
@@ -45,15 +46,13 @@ public class MainActivity extends AppCompatActivity {
         FirebaseMessaging.getInstance().subscribeToTopic("incidents_all")
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
-                        // Optionnel : Log d'erreur
                         // Log.e("FCM", "Echec abonnement topic", task.getException());
                     }
                 });
 
-        // B. Demander la permission explicite sur Android 13 (API 33) et plus
+        // B. Demander la permission explicite sur Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                // Affiche la popup système "SafeCity souhaite vous envoyer des notifications"
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
             }
         }
@@ -79,8 +78,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 selectedFragment = new SignalementFragment();
             } else if (itemId == R.id.nav_activity) {
-                Toast.makeText(this, "Notifications à venir", Toast.LENGTH_SHORT).show();
-                return false;
+                // MODIFICATION : Ouvre le fragment Notifications
+                selectedFragment = new NotificationsFragment();
             } else if (itemId == R.id.nav_profile) {
                 selectedFragment = new ProfileFragment();
             }
@@ -145,9 +144,6 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
-    /**
-     * Méthode publique appelée depuis IncidentAdapter ou MapFragment.
-     */
     public void navigateToMapAndFocus(double lat, double lng) {
         bottomNav.getMenu().findItem(R.id.nav_map).setChecked(true);
 

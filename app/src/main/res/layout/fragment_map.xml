@@ -1,15 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
+<RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".ui.fragments.MapFragment">
 
+    <!-- La Carte (en arrière-plan) -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/map_fragment_view"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-</FrameLayout>
+    <!-- La barre de filtres (au-dessus de la carte) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="16dp"
+        android:scrollbars="none"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:clipToPadding="false">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chip_group_filters"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:singleLine="true"
+            app:singleSelection="true"
+            app:selectionRequired="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_all"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Tous" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_accident"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Accident" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_vol"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Vol" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_travaux"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Travaux" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_incendie"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Incendie" />
+
+        </com.google.android.material.chip.ChipGroup>
+    </HorizontalScrollView>
+
+</RelativeLayout>
