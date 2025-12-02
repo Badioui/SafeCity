@@ -20,6 +20,9 @@ import com.example.safecity.model.Incident;
 import com.example.safecity.model.Utilisateur;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.ui.adapters.IncidentAdapter;
+
+import com.google.android.material.chip.ChipGroup;
+
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -35,14 +38,15 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     private FirestoreRepository firestoreRepo;
     private ListenerRegistration firestoreListener;
 
-    // Variable pour stocker la requête de recherche
+    private ChipGroup chipGroup;
+    private List<Incident> allIncidents = new ArrayList<>();
+
     private String searchQuery = null;
     private String myUserId;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // On récupère la requête si elle existe
         if (getArguments() != null) {
             searchQuery = getArguments().getString("search_query");
         }
@@ -55,39 +59,52 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         recyclerView = view.findViewById(R.id.recycler_view_home);
         tvEmptyState = view.findViewById(R.id.tv_empty_state);
-        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        chipGroup = view.findViewById(R.id.chip_group_filters_home);
 
+        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         firestoreRepo = new FirestoreRepository();
 
-        // Initialiser l'adaptateur avec 'this' comme listener pour les clics
         adapter = new IncidentAdapter(getContext(), new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
 
-        // Si on est en mode recherche, on peut changer le titre ou afficher un Toast
         if (searchQuery != null) {
-            Toast.makeText(getContext(), "Résultats pour : " + searchQuery, Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Recherche : " + searchQuery, Toast.LENGTH_SHORT).show();
         }
 
-        // --- GESTION UTILISATEUR & RÔLES ---
+        // --- GESTION UTILISATEUR & SIMULATION ADMIN ---
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
         if (fbUser != null) {
             myUserId = fbUser.getUid();
-            // Récupérer les infos complètes (Rôle) depuis Firestore
-            firestoreRepo.getUser(myUserId, new FirestoreRepository.OnUserLoadedListener() {
-                @Override
-                public void onUserLoaded(Utilisateur utilisateur) {
-                    if (utilisateur != null && isAdded()) {
-                        // On passe l'ID et le Rôle à l'adaptateur pour configurer la visibilité des boutons
-                        adapter.setCurrentUser(myUserId, utilisateur.getIdRole());
-                    }
-                }
 
-                @Override
-                public void onError(Exception e) {
-                    // Erreur silencieuse ou log, l'utilisateur verra l'interface par défaut (citoyen)
-                }
-            });
+            // ASTUCE POUR LA DÉMO :
+            // Si l'email contient le mot "admin", on force le rôle, peu importe la base de données.
+            if (fbUser.getEmail() != null && fbUser.getEmail().contains("admin")) {
+
+                // On notifie l'adaptateur qu'on est ADMIN
+                adapter.setCurrentUser(myUserId, "admin");
+
+                // Petit message discret pour confirmer que le hack a fonctionné
+                // Toast.makeText(getContext(), "Mode Admin Activé (Démo)", Toast.LENGTH_SHORT).show();
+
+            } else {
+                // COMPORTEMENT NORMAL (Récupération depuis Firestore)
+                firestoreRepo.getUser(myUserId, new FirestoreRepository.OnUserLoadedListener() {
+                    @Override
+                    public void onUserLoaded(Utilisateur utilisateur) {
+                        if (utilisateur != null && isAdded()) {
+                            adapter.setCurrentUser(myUserId, utilisateur.getIdRole());
+                        }
+                    }
+                    @Override
+                    public void onError(Exception e) { }
+                });
+            }
         }
+
+        // --- LISTENER DES CHIPS (FILTRES) ---
+        chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            applyFilters();
+        });
     }
 
     @Override
@@ -111,55 +128,68 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             public void onIncidentsLoaded(List<Incident> incidents) {
                 if (!isAdded() || getActivity() == null) return;
 
-                List<Incident> displayList;
-
-                // --- LOGIQUE DE FILTRAGE (RECHERCHE) ---
-                if (searchQuery != null && !searchQuery.isEmpty() && incidents != null) {
-                    displayList = new ArrayList<>();
-                    String queryLower = searchQuery.toLowerCase();
-
-                    for (Incident i : incidents) {
-                        boolean matchesDesc = i.getDescription() != null && i.getDescription().toLowerCase().contains(queryLower);
-                        boolean matchesCat = i.getNomCategorie() != null && i.getNomCategorie().toLowerCase().contains(queryLower);
-
-                        if (matchesDesc || matchesCat) {
-                            displayList.add(i);
-                        }
-                    }
-                } else {
-                    displayList = incidents;
-                }
-
-                // --- MISE A JOUR UI ---
-                if (displayList != null && !displayList.isEmpty()) {
-                    adapter.updateData(displayList);
-                    tvEmptyState.setVisibility(View.GONE);
-                    recyclerView.setVisibility(View.VISIBLE);
-                } else {
-                    if (searchQuery != null) {
-                        tvEmptyState.setText("Aucun résultat trouvé pour \"" + searchQuery + "\"");
-                    } else {
-                        tvEmptyState.setText("Aucun incident signalé pour le moment.");
-                    }
-                    tvEmptyState.setVisibility(View.VISIBLE);
-                    recyclerView.setVisibility(View.GONE);
-                }
+                allIncidents = incidents != null ? incidents : new ArrayList<>();
+                applyFilters();
             }
 
             @Override
             public void onError(Exception e) {
                 if (isAdded() && getContext() != null) {
-                    Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 }
             }
         });
     }
 
-    // --- IMPLÉMENTATION DES ACTIONS DE L'ADAPTATEUR ---
+    private void applyFilters() {
+        List<Incident> filteredList = new ArrayList<>();
+        String queryLower = (searchQuery != null) ? searchQuery.toLowerCase() : null;
+
+        String categoryFilter = null;
+        int checkedId = chipGroup.getCheckedChipId();
+
+        if (checkedId == R.id.chip_accident) categoryFilter = "Accident";
+        else if (checkedId == R.id.chip_vol) categoryFilter = "Vol";
+        else if (checkedId == R.id.chip_travaux) categoryFilter = "Travaux";
+        else if (checkedId == R.id.chip_incendie) categoryFilter = "Incendie";
+
+        for (Incident i : allIncidents) {
+            boolean matchesSearch = true;
+            boolean matchesCategory = true;
+
+            if (queryLower != null) {
+                boolean inDesc = i.getDescription() != null && i.getDescription().toLowerCase().contains(queryLower);
+                boolean inCat = i.getNomCategorie() != null && i.getNomCategorie().toLowerCase().contains(queryLower);
+                if (!inDesc && !inCat) matchesSearch = false;
+            }
+
+            if (categoryFilter != null) {
+                if (i.getNomCategorie() == null || !i.getNomCategorie().contains(categoryFilter)) {
+                    matchesCategory = false;
+                }
+            }
+
+            if (matchesSearch && matchesCategory) {
+                filteredList.add(i);
+            }
+        }
+
+        adapter.updateData(filteredList);
+
+        if (filteredList.isEmpty()) {
+            tvEmptyState.setVisibility(View.VISIBLE);
+            if (categoryFilter != null) tvEmptyState.setText("Aucun " + categoryFilter + " trouvé.");
+            else if (searchQuery != null) tvEmptyState.setText("Aucun résultat pour \"" + searchQuery + "\"");
+            else tvEmptyState.setText("Aucun incident.");
+            recyclerView.setVisibility(View.GONE);
+        } else {
+            tvEmptyState.setVisibility(View.GONE);
+            recyclerView.setVisibility(View.VISIBLE);
+        }
+    }
 
     @Override
     public void onValidateClick(Incident incident) {
-        // Appelé quand une Autorité/Admin clique sur "Valider"
         new AlertDialog.Builder(getContext())
                 .setTitle("Validation")
                 .setMessage("Confirmer la prise en charge de cet incident ? Il passera au statut 'Traité'.")
@@ -168,12 +198,10 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                         @Override
                         public void onSuccess() {
                             Toast.makeText(getContext(), "Incident validé avec succès !", Toast.LENGTH_SHORT).show();
-                            // La liste se mettra à jour automatiquement grâce au Realtime Listener
                         }
-
                         @Override
                         public void onError(Exception e) {
-                            Toast.makeText(getContext(), "Erreur lors de la validation : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                         }
                     });
                 })
@@ -183,13 +211,11 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     @Override
     public void onEditClick(Incident incident) {
-        // Redirection vers un fragment d'édition (À implémenter selon besoins)
         Toast.makeText(getContext(), "Fonctionnalité d'édition à venir", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onDeleteClick(Incident incident) {
-        // Suppression (possible si c'est mon incident ou si je suis admin)
         new AlertDialog.Builder(getContext())
                 .setTitle("Suppression")
                 .setMessage("Voulez-vous vraiment supprimer ce signalement ?")
@@ -199,7 +225,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                         public void onSuccess() {
                             Toast.makeText(getContext(), "Incident supprimé.", Toast.LENGTH_SHORT).show();
                         }
-
                         @Override
                         public void onError(Exception e) {
                             Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -212,7 +237,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     @Override
     public void onMapClick(Incident incident) {
-        // Redirection vers la Map
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).navigateToMapAndFocus(incident.getLatitude(), incident.getLongitude());
         }

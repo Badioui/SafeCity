@@ -2,16 +2,20 @@ package com.example.safecity;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences; // Import pour sauvegarder la position
 import android.content.pm.PackageManager;
-import android.net.Uri; // Import pour l'appel téléphonique
+import android.location.Location; // Import pour l'objet Location
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -19,7 +23,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.floatingactionbutton.FloatingActionButton; // Import du bouton flottant
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -30,11 +34,18 @@ import com.example.safecity.ui.fragments.SignalementFragment;
 import com.example.safecity.ui.fragments.ProfileFragment;
 import com.example.safecity.ui.fragments.NotificationsFragment;
 
-public class MainActivity extends AppCompatActivity {
+// Import du Helper GPS (Assurez-vous que le fichier LocationHelper.java existe dans le dossier utils)
+import com.example.safecity.utils.LocationHelper;
+
+// AJOUT : Implémentation de l'interface LocationListener
+public class MainActivity extends AppCompatActivity implements LocationHelper.LocationListener {
 
     private BottomNavigationView bottomNav;
     private ImageButton btnSearch;
-    private FloatingActionButton btnSos; // Référence au bouton SOS
+    private FloatingActionButton btnSos;
+
+    // AJOUT : Variable pour le GPS
+    private LocationHelper locationHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,15 +53,23 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         // ==================================================================
-        // 1. GESTION DES NOTIFICATIONS (ABONNEMENT + PERMISSIONS)
+        // 0. INIT GPS (POUR NOTIFICATIONS)
+        // ==================================================================
+        // On initialise le helper et on lance la demande de permission GPS
+        locationHelper = new LocationHelper(this);
+        checkPermissionsAndStartGPS();
+
+        // ==================================================================
+        // 1. GESTION DES NOTIFICATIONS (ABONNEMENT + PERMISSIONS POST)
         // ==================================================================
         FirebaseMessaging.getInstance().subscribeToTopic("incidents_all")
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
-                        // Log.e("FCM", "Echec abonnement topic", task.getException());
+                        Log.e("FCM", "Echec abonnement topic", task.getException());
                     }
                 });
 
+        // Permission pour AFFICHER les notifications (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
@@ -58,19 +77,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ==================================================================
-        // 2. LOGIQUE SOS (NOUVEAU)
+        // 2. LOGIQUE SOS
         // ==================================================================
         btnSos = findViewById(R.id.btn_sos);
 
-        // Action au clic simple : Avertissement (éviter les fausses manips)
         btnSos.setOnClickListener(v -> {
             Toast.makeText(this, "Maintenez appuyé pour appeler les secours (19)", Toast.LENGTH_SHORT).show();
         });
 
-        // Action au clic long : Lancer l'alerte
         btnSos.setOnLongClickListener(v -> {
             lancerAppelUrgence();
-            return true; // "true" indique que l'événement est consommé (pas de clic simple après)
+            return true;
         });
 
         // ==================================================================
@@ -120,7 +137,6 @@ public class MainActivity extends AppCompatActivity {
 
     // --- MÉTHODE D'URGENCE ---
     private void lancerAppelUrgence() {
-        // Appeler le 19 (Police Maroc) ou 112 (International)
         Uri number = Uri.parse("tel:19");
         Intent callIntent = new Intent(Intent.ACTION_DIAL, number);
         try {
@@ -185,5 +201,54 @@ public class MainActivity extends AppCompatActivity {
                 .replace(R.id.nav_host_fragment, mapFragment)
                 .addToBackStack(null)
                 .commit();
+    }
+
+    // ==================================================================
+    // 4. GESTION GPS (POUR NOTIFICATIONS ET LOCALISATION)
+    // ==================================================================
+
+    private void checkPermissionsAndStartGPS() {
+        // On vérifie la permission de localisation précise
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Si pas accordée, on la demande (Code 102)
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 102);
+        } else {
+            // Si déjà accordée, on lance le GPS
+            locationHelper.startLocationUpdates(this);
+        }
+    }
+
+    // Gère le résultat de la demande de permission (Pop-up système)
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        // Cas : Permission Notification (101)
+        // (Géré implicitement, pas d'action critique requise ici pour l'instant)
+
+        // Cas : Permission GPS (102)
+        if (requestCode == 102 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            locationHelper.startLocationUpdates(this);
+        }
+    }
+
+    // Méthode appelée automatiquement par LocationHelper quand on a une nouvelle position
+    @Override
+    public void onLocationReceived(Location location) {
+        // C'EST ICI LE CŒUR DU SYSTÈME :
+        // On sauvegarde la latitude/longitude dans les préférences partagées.
+        // MyFirebaseMessagingService ira lire ces valeurs pour calculer la distance.
+        getSharedPreferences("safe_city_prefs", MODE_PRIVATE).edit()
+                .putFloat("last_lat", (float) location.getLatitude())
+                .putFloat("last_lng", (float) location.getLongitude())
+                .apply();
+
+        // Log pour vérifier que ça marche (visible dans Logcat)
+        Log.d("MainActivity", "Position mise à jour : " + location.getLatitude() + ", " + location.getLongitude());
+    }
+
+    @Override
+    public void onLocationError(String message) {
+        Log.e("MainActivity", "Erreur GPS : " + message);
     }
 }

@@ -18,7 +18,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Header: Profil, Nom, Date, Statut -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -75,7 +74,6 @@
                 tools:text="NOUVEAU" />
         </RelativeLayout>
 
-        <!-- Image de l'incident -->
         <ImageView
             android:id="@+id/img_incident_photo"
             android:layout_width="match_parent"
@@ -85,7 +83,6 @@
             android:background="@color/light_separator"
             android:src="@drawable/ic_incident_placeholder" />
 
-        <!-- Contenu: Description et Boutons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -103,7 +100,6 @@
                 android:layout_marginBottom="12dp"
                 tools:text="Gros accident impliquant deux voitures sur l'autoroute..." />
 
-            <!-- Barre d'actions -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -142,15 +138,15 @@
                     android:padding="8dp"
                     android:contentDescription="Supprimer le signalement" />
 
-                <!-- BOUTON VALIDER AJOUTÉ ICI -->
                 <ImageButton
                     android:id="@+id/btn_validate_incident"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/status_new_bg"
-                    android:tint="@android:color/holo_green_dark"
+                    android:src="@drawable/ic_add"
+                    app:tint="@android:color/holo_green_dark"
+                    android:rotation="45"
                     android:padding="8dp"
                     android:visibility="gone"
                     android:contentDescription="Valider l'incident (Passer en Traité)"
@@ -160,14 +156,6 @@
                     android:layout_width="0dp"
                     android:layout_height="0dp"
                     android:layout_weight="1"/>
-
-                <TextView
-                    android:id="@+id/tv_simple_date"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="12sp"
-                    android:textColor="@color/light_text_secondary"
-                    tools:text="Publié il y a 4 jours" />
 
             </LinearLayout>
         </LinearLayout>

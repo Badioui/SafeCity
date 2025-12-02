@@ -2,6 +2,7 @@ package com.example.safecity.model;
 
 import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.clustering.ClusterItem; // Import nécessaire pour le clustering
+import com.google.firebase.firestore.Exclude;
 
 import java.util.Date;
 
@@ -91,6 +92,7 @@ public class Incident implements ClusterItem { // Implements ClusterItem ajouté
     public void setUserName(String userName) { this.userName = userName; }
 
     // --- Utilitaires ---
+    @Exclude
     public boolean isTraite() {
         return STATUT_TRAITE.equalsIgnoreCase(statut);
     }

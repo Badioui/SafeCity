@@ -106,6 +106,8 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         // --- 2. LOGIQUE DES BOUTONS SELON LES RÔLES ---
 
         boolean isOwner = incident.getIdUtilisateur() != null && incident.getIdUtilisateur().equals(currentUserId);
+
+        // Sécurité pour la démo : si le rôle n'est pas encore chargé, on assume "citoyen"
         boolean isAdmin = "admin".equalsIgnoreCase(currentUserRole);
         boolean isAuthority = "autorite".equalsIgnoreCase(currentUserRole);
 
