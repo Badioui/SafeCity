@@ -1,28 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ui.fragments.MapFragment">
+    android:layout_height="match_parent">
 
-    <!-- La Carte (en arrière-plan) -->
+    <!-- LA CARTE (En arrière-plan, prend tout l'écran) -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/map_fragment_view"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- La barre de filtres (au-dessus de la carte) -->
+    <!-- LES FILTRES (Au premier plan, en haut) -->
+    <!-- HorizontalScrollView permet de faire défiler les chips si l'écran est petit -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_marginTop="16dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
         android:scrollbars="none"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
         android:clipToPadding="false">
 
         <com.google.android.material.chip.ChipGroup
@@ -39,35 +37,50 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Tous" />
+                android:text="Tous"
+                android:textColor="@android:color/black" />
 
+            <!-- CORRECTION : Liste conforme à Firebase -->
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_accident"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Accident" />
+                android:text="Accident"
+                android:textColor="@android:color/black" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_vol"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Vol" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chip_travaux"
-                style="@style/Widget.MaterialComponents.Chip.Choice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Travaux" />
+                android:text="Vol"
+                android:textColor="@android:color/black" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_incendie"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Incendie" />
+                android:text="Incendie"
+                android:textColor="@android:color/black" />
+
+            <!-- AJOUTS pour correspondre aux données -->
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_panne"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Panne"
+                android:textColor="@android:color/black" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_autre"
+                style="@style/Widget.MaterialComponents.Chip.Choice"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Autre"
+                android:textColor="@android:color/black" />
 
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>

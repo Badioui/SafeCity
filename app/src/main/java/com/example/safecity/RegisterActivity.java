@@ -96,14 +96,12 @@ public class RegisterActivity extends AppCompatActivity {
         Utilisateur newUser = new Utilisateur();
         newUser.setNom(nom);
         newUser.setEmail(email);
-
-        // --- CORRECTION MAJEURE ICI ---
-        // Avant : newUser.setIdRole(3); -> Erreur car idRole est maintenant un String
-        // Maintenant : On assigne l'ID String du document rôle correspondant
         newUser.setIdRole("citoyen");
 
-        // On peut aussi ajouter la date de création si le champ existe dans votre modèle
-        // newUser.setDateCreation(new Date().toString());
+        // --- CORRECTION : AJOUT DE LA DATE DE CRÉATION ---
+        // On utilise le timestamp système actuel converti en String
+        // Cela permet de savoir quand l'utilisateur s'est inscrit
+        newUser.setDateCreation(String.valueOf(System.currentTimeMillis()));
 
         db.collection("users").document(uid)
                 .set(newUser)

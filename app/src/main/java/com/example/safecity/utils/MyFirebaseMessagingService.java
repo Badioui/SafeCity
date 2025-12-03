@@ -30,73 +30,67 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "Message reçu de: " + remoteMessage.getFrom());
 
-        // 1. LOGIQUE DE FILTRAGE PAR POSITION
-        // On vérifie si le message contient des données de coordonnées (lat/lng)
-        if (remoteMessage.getData().size() > 0 && remoteMessage.getData().containsKey("lat")) {
-            try {
-                String latStr = remoteMessage.getData().get("lat");
-                String lngStr = remoteMessage.getData().get("lng");
+        // 1. GESTION DES DONNÉES (DATA PAYLOAD)
+        // C'est ici que le serveur Node.js envoie les coordonnées "cachées"
+        if (remoteMessage.getData().size() > 0) {
+            String latStr = remoteMessage.getData().get("lat");
+            String lngStr = remoteMessage.getData().get("lng");
 
-                if (latStr != null && lngStr != null) {
-                    double incidentLat = Double.parseDouble(latStr);
-                    double incidentLng = Double.parseDouble(lngStr);
+            // On récupère le titre et le corps.
+            // Si le serveur les met dans 'notification', on les prend de là.
+            // Sinon, on met des valeurs par défaut.
+            String title = remoteMessage.getNotification() != null ?
+                    remoteMessage.getNotification().getTitle() : "Alerte SafeCity";
+            String body = remoteMessage.getNotification() != null ?
+                    remoteMessage.getNotification().getBody() : "Nouvel incident signalé.";
 
-                    // Vérifier la distance
-                    if (isIncidentClose(incidentLat, incidentLng)) {
-                        // C'est proche ! On construit le titre/body
-                        String title = remoteMessage.getNotification() != null ?
-                                remoteMessage.getNotification().getTitle() : "Alerte Proximité";
-                        String body = remoteMessage.getNotification() != null ?
-                                remoteMessage.getNotification().getBody() : "Un incident a été signalé près de vous.";
+            if (latStr != null && lngStr != null) {
+                try {
+                    double lat = Double.parseDouble(latStr);
+                    double lng = Double.parseDouble(lngStr);
 
-                        sendNotification(title, body);
+                    // Vérification de la distance (5km pour le test, 500m en réel)
+                    if (isIncidentClose(lat, lng)) {
+                        // IMPORTANT : On passe latStr et lngStr à la méthode sendNotification
+                        sendNotification(title, body, latStr, lngStr);
                     } else {
-                        Log.d(TAG, "Incident ignoré car trop loin de la position utilisateur.");
+                        Log.d(TAG, "Incident ignoré car trop loin.");
                     }
+                } catch (NumberFormatException e) {
+                    Log.e(TAG, "Erreur format GPS", e);
                 }
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Erreur de format des coordonnées dans la notif", e);
+            } else {
+                // Pas de GPS dans le message ? Notification simple
+                sendNotification(title, body, null, null);
             }
         }
-        // 2. CAS STANDARD (Pas de coordonnées dans les données)
-        // C'est une alerte générale envoyée à tout le monde
+        // 2. GESTION NOTIFICATION SIMPLE (Sans data GPS)
         else if (remoteMessage.getNotification() != null) {
-            String title = remoteMessage.getNotification().getTitle();
-            String body = remoteMessage.getNotification().getBody();
-            sendNotification(title, body);
+            sendNotification(
+                    remoteMessage.getNotification().getTitle(),
+                    remoteMessage.getNotification().getBody(),
+                    null, null
+            );
         }
     }
 
     /**
-     * Vérifie si l'incident est dans un rayon acceptable (500m).
+     * Vérifie si l'incident est dans un rayon acceptable.
      */
     private boolean isIncidentClose(double incLat, double incLng) {
-        // 1. Récupérer ma dernière position connue (sauvegardée par MainActivity)
-        // ATTENTION : On utilise le même nom de fichier que dans MainActivity ("safe_city_prefs")
         SharedPreferences prefs = getSharedPreferences("safe_city_prefs", MODE_PRIVATE);
-
         float myLat = prefs.getFloat("last_lat", 0);
         float myLng = prefs.getFloat("last_lng", 0);
 
-        // Si on n'a jamais eu de position (0,0), on affiche l'alerte par sécurité
+        // Si on n'a jamais eu de position, on affiche l'alerte par sécurité
         if (myLat == 0 && myLng == 0) return true;
 
-        // 2. Créer des objets Location pour le calcul
-        Location incidentLoc = new Location("incident");
-        incidentLoc.setLatitude(incLat);
-        incidentLoc.setLongitude(incLng);
+        float[] results = new float[1];
+        Location.distanceBetween(myLat, myLng, incLat, incLng, results);
 
-        Location myLoc = new Location("moi");
-        myLoc.setLatitude(myLat);
-        myLoc.setLongitude(myLng);
-
-        // 3. Calculer la distance en mètres
-        float distanceEnMetres = myLoc.distanceTo(incidentLoc);
-
-        Log.d(TAG, "Distance incident: " + distanceEnMetres + "m");
-
-        // 4. Vérifier si c'est inférieur à 500m
-        return distanceEnMetres <= 500;
+        // Seuil : 5000 mètres (5km) pour faciliter vos tests.
+        // Pour la prod, mettez 500.
+        return results[0] <= 5000;
     }
 
     @Override
@@ -105,9 +99,20 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         Log.d(TAG, "Nouveau token FCM: " + token);
     }
 
-    private void sendNotification(String title, String messageBody) {
+    // --- MÉTHODE MISE À JOUR ---
+    private void sendNotification(String title, String messageBody, String lat, String lng) {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        // C'EST ICI LA CLÉ DU SYSTÈME :
+        // On attache les coordonnées à l'intent.
+        // Quand MainActivity s'ouvrira, elle lira ces valeurs.
+        if (lat != null && lng != null) {
+            intent.putExtra("lat", lat);
+            intent.putExtra("lng", lng);
+            // On ajoute l'action pour correspondre au filtre du Manifest
+            intent.setAction("MainActivity");
+        }
 
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent,
                 PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
@@ -122,12 +127,13 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                         .setContentText(messageBody)
                         .setAutoCancel(true)
                         .setSound(defaultSoundUri)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH) // Important pour l'affichage tête haute
                         .setContentIntent(pendingIntent);
 
         NotificationManager notificationManager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
+        // Création du canal de notification (Obligatoire Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(channelId,
                     "Alertes SafeCity",

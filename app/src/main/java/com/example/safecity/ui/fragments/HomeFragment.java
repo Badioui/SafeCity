@@ -18,10 +18,12 @@ import com.example.safecity.MainActivity;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 import com.example.safecity.model.Utilisateur;
+import com.example.safecity.model.NotificationApp;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.ui.adapters.IncidentAdapter;
 
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -39,10 +41,14 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     private ListenerRegistration firestoreListener;
 
     private ChipGroup chipGroup;
+    private FloatingActionButton fabStats;
     private List<Incident> allIncidents = new ArrayList<>();
 
     private String searchQuery = null;
     private String myUserId;
+
+    // Variable pour stocker si l'utilisateur est admin
+    private boolean isAdminMode = false;
 
     @Nullable
     @Override
@@ -61,6 +67,12 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         tvEmptyState = view.findViewById(R.id.tv_empty_state);
         chipGroup = view.findViewById(R.id.chip_group_filters_home);
 
+        // Récupération sécurisée du FAB Stats
+        fabStats = requireActivity().findViewById(R.id.fab_stats);
+        if (fabStats != null) {
+            fabStats.setVisibility(View.GONE);
+        }
+
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         firestoreRepo = new FirestoreRepository();
 
@@ -71,37 +83,44 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             Toast.makeText(getContext(), "Recherche : " + searchQuery, Toast.LENGTH_SHORT).show();
         }
 
-        // --- GESTION UTILISATEUR & SIMULATION ADMIN ---
+        // --- GESTION UTILISATEUR & RÔLES ---
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
         if (fbUser != null) {
             myUserId = fbUser.getUid();
 
-            // ASTUCE POUR LA DÉMO :
-            // Si l'email contient le mot "admin", on force le rôle, peu importe la base de données.
-            if (fbUser.getEmail() != null && fbUser.getEmail().contains("admin")) {
+            firestoreRepo.getUser(myUserId, new FirestoreRepository.OnUserLoadedListener() {
+                @Override
+                public void onUserLoaded(Utilisateur utilisateur) {
+                    if (utilisateur != null && isAdded()) {
+                        String role = utilisateur.getIdRole();
 
-                // On notifie l'adaptateur qu'on est ADMIN
-                adapter.setCurrentUser(myUserId, "admin");
-
-                // Petit message discret pour confirmer que le hack a fonctionné
-                // Toast.makeText(getContext(), "Mode Admin Activé (Démo)", Toast.LENGTH_SHORT).show();
-
-            } else {
-                // COMPORTEMENT NORMAL (Récupération depuis Firestore)
-                firestoreRepo.getUser(myUserId, new FirestoreRepository.OnUserLoadedListener() {
-                    @Override
-                    public void onUserLoaded(Utilisateur utilisateur) {
-                        if (utilisateur != null && isAdded()) {
-                            adapter.setCurrentUser(myUserId, utilisateur.getIdRole());
+                        if ("admin".equalsIgnoreCase(role) || "autorite".equalsIgnoreCase(role)) {
+                            isAdminMode = true;
+                            if (fabStats != null) {
+                                fabStats.setVisibility(View.VISIBLE);
+                                fabStats.setOnClickListener(v -> showStatisticsDialog());
+                            }
+                        } else {
+                            isAdminMode = false;
+                            if (fabStats != null) {
+                                fabStats.setVisibility(View.GONE);
+                            }
                         }
+                        adapter.setCurrentUser(myUserId, role);
                     }
-                    @Override
-                    public void onError(Exception e) { }
-                });
-            }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    if(isAdded()) {
+                        adapter.setCurrentUser(myUserId, "user");
+                        if (fabStats != null) fabStats.setVisibility(View.GONE);
+                    }
+                }
+            });
         }
 
-        // --- LISTENER DES CHIPS (FILTRES) ---
+        // --- LISTENER DES CHIPS MIS À JOUR ---
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             applyFilters();
         });
@@ -120,6 +139,9 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             firestoreListener.remove();
             firestoreListener = null;
         }
+        if (fabStats != null) {
+            fabStats.setVisibility(View.GONE);
+        }
     }
 
     private void loadData() {
@@ -127,7 +149,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             @Override
             public void onIncidentsLoaded(List<Incident> incidents) {
                 if (!isAdded() || getActivity() == null) return;
-
                 allIncidents = incidents != null ? incidents : new ArrayList<>();
                 applyFilters();
             }
@@ -141,6 +162,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         });
     }
 
+    // --- LOGIQUE DE FILTRAGE MISE À JOUR (Panne + Insensible à la casse) ---
     private void applyFilters() {
         List<Incident> filteredList = new ArrayList<>();
         String queryLower = (searchQuery != null) ? searchQuery.toLowerCase() : null;
@@ -148,23 +170,29 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String categoryFilter = null;
         int checkedId = chipGroup.getCheckedChipId();
 
+        // Correspondance avec les nouveaux IDs du XML
         if (checkedId == R.id.chip_accident) categoryFilter = "Accident";
         else if (checkedId == R.id.chip_vol) categoryFilter = "Vol";
-        else if (checkedId == R.id.chip_travaux) categoryFilter = "Travaux";
         else if (checkedId == R.id.chip_incendie) categoryFilter = "Incendie";
+        else if (checkedId == R.id.chip_panne) categoryFilter = "Panne"; // Remplace Travaux
+        else if (checkedId == R.id.chip_autre) categoryFilter = "Autre"; // Nouveau
 
         for (Incident i : allIncidents) {
             boolean matchesSearch = true;
             boolean matchesCategory = true;
 
+            // 1. Filtre Recherche (Texte)
             if (queryLower != null) {
                 boolean inDesc = i.getDescription() != null && i.getDescription().toLowerCase().contains(queryLower);
                 boolean inCat = i.getNomCategorie() != null && i.getNomCategorie().toLowerCase().contains(queryLower);
                 if (!inDesc && !inCat) matchesSearch = false;
             }
 
+            // 2. Filtre Catégorie (Chips) - Comparaison insensible à la casse
             if (categoryFilter != null) {
-                if (i.getNomCategorie() == null || !i.getNomCategorie().contains(categoryFilter)) {
+                // On compare en minuscules pour trouver "panne" dans "Panne électrique" ou "PANNE MOTEUR"
+                if (i.getNomCategorie() == null ||
+                        !i.getNomCategorie().toLowerCase().contains(categoryFilter.toLowerCase())) {
                     matchesCategory = false;
                 }
             }
@@ -176,9 +204,10 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         adapter.updateData(filteredList);
 
+        // Gestion de l'affichage "Vide"
         if (filteredList.isEmpty()) {
             tvEmptyState.setVisibility(View.VISIBLE);
-            if (categoryFilter != null) tvEmptyState.setText("Aucun " + categoryFilter + " trouvé.");
+            if (categoryFilter != null) tvEmptyState.setText("Aucun incident de type '" + categoryFilter + "'");
             else if (searchQuery != null) tvEmptyState.setText("Aucun résultat pour \"" + searchQuery + "\"");
             else tvEmptyState.setText("Aucun incident.");
             recyclerView.setVisibility(View.GONE);
@@ -188,16 +217,24 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         }
     }
 
+    // --- ACTIONS ADAPTER ---
+
     @Override
     public void onValidateClick(Incident incident) {
         new AlertDialog.Builder(getContext())
                 .setTitle("Validation")
-                .setMessage("Confirmer la prise en charge de cet incident ? Il passera au statut 'Traité'.")
+                .setMessage("Confirmer la prise en charge de cet incident ?")
                 .setPositiveButton("Oui", (dialog, which) -> {
                     firestoreRepo.updateIncidentStatus(incident.getId(), "Traité", new FirestoreRepository.OnFirestoreTaskComplete() {
                         @Override
                         public void onSuccess() {
-                            Toast.makeText(getContext(), "Incident validé avec succès !", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getContext(), "Incident validé !", Toast.LENGTH_SHORT).show();
+                            NotificationApp notif = new NotificationApp(
+                                    "Incident Résolu ✅",
+                                    "L'incident de type '" + incident.getNomCategorie() + "' a été traité par les autorités.",
+                                    "validation"
+                            );
+                            firestoreRepo.addNotification(notif);
                         }
                         @Override
                         public void onError(Exception e) {
@@ -211,19 +248,29 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     @Override
     public void onEditClick(Incident incident) {
-        Toast.makeText(getContext(), "Fonctionnalité d'édition à venir", Toast.LENGTH_SHORT).show();
+        boolean isOwner = myUserId != null && myUserId.equals(incident.getIdUtilisateur());
+
+        if (isOwner || isAdminMode) {
+            SignalementFragment fragment = SignalementFragment.newInstance(incident.getId());
+            getParentFragmentManager().beginTransaction()
+                    .replace(R.id.nav_host_fragment, fragment)
+                    .addToBackStack(null)
+                    .commit();
+        } else {
+            Toast.makeText(getContext(), "Vous n'avez pas la permission de modifier cet incident.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
     public void onDeleteClick(Incident incident) {
         new AlertDialog.Builder(getContext())
                 .setTitle("Suppression")
-                .setMessage("Voulez-vous vraiment supprimer ce signalement ?")
+                .setMessage("Supprimer définitivement ce signalement ?")
                 .setPositiveButton("Supprimer", (dialog, which) -> {
                     firestoreRepo.deleteIncident(incident.getId(), incident.getPhotoUrl(), new FirestoreRepository.OnFirestoreTaskComplete() {
                         @Override
                         public void onSuccess() {
-                            Toast.makeText(getContext(), "Incident supprimé.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getContext(), "Supprimé.", Toast.LENGTH_SHORT).show();
                         }
                         @Override
                         public void onError(Exception e) {
@@ -240,5 +287,36 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).navigateToMapAndFocus(incident.getLatitude(), incident.getLongitude());
         }
+    }
+
+    private void showStatisticsDialog() {
+        if (allIncidents == null || allIncidents.isEmpty()) {
+            Toast.makeText(getContext(), "Pas de données.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int nbAccidents = 0, nbVols = 0, nbIncendies = 0, nbTravaux = 0, nbTraites = 0;
+
+        for (Incident i : allIncidents) {
+            String cat = (i.getNomCategorie() != null) ? i.getNomCategorie().toLowerCase() : "";
+            if (cat.contains("accident")) nbAccidents++;
+            else if (cat.contains("vol")) nbVols++;
+            else if (cat.contains("incendie")) nbIncendies++;
+            else if (cat.contains("travaux") || cat.contains("panne")) nbTravaux++; // On regroupe Panne/Travaux pour stats
+
+            if ("Traité".equalsIgnoreCase(i.getStatut())) nbTraites++;
+        }
+
+        String statsMsg = "📊 Rapport de la Ville :\n\n" +
+                "🚗 Accidents : " + nbAccidents + "\n" +
+                "🏃 Vols : " + nbVols + "\n" +
+                "🔥 Incendies : " + nbIncendies + "\n" +
+                "🔧 Pannes/Travaux : " + nbTravaux + "\n\n" +
+                "✅ Résolus : " + nbTraites + " / " + allIncidents.size();
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Statistiques Admin")
+                .setMessage(statsMsg)
+                .setPositiveButton("Fermer", null)
+                .show();
     }
 }

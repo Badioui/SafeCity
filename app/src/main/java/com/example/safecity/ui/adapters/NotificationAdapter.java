@@ -23,6 +23,13 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
         this.notifList = notifList;
     }
 
+    // --- AJOUT DE LA MÉTHODE MANQUANTE ---
+    public void updateData(List<NotificationApp> newList) {
+        this.notifList = newList;
+        notifyDataSetChanged(); // Rafraîchit la vue avec les nouvelles données
+    }
+    // -------------------------------------
+
     @NonNull
     @Override
     public NotifViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -44,12 +51,17 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
 
         // Changer l'icône selon le type (optionnel)
         if ("alerte".equals(notif.getType())) {
-            holder.imgIcon.setImageResource(R.drawable.ic_info); // Mettre une icône d'alerte si dispo
+            holder.imgIcon.setImageResource(R.drawable.ic_info);
+        } else {
+            // Icône par défaut si besoin
+            holder.imgIcon.setImageResource(R.drawable.ic_notifications);
         }
     }
 
     @Override
-    public int getItemCount() { return notifList.size(); }
+    public int getItemCount() {
+        return notifList != null ? notifList.size() : 0;
+    }
 
     public static class NotifViewHolder extends RecyclerView.ViewHolder {
         TextView tvTitle, tvMessage, tvDate;

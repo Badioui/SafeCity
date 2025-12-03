@@ -1,41 +1,38 @@
 package com.example.safecity.model;
 
 import com.google.android.gms.maps.model.LatLng;
-import com.google.maps.android.clustering.ClusterItem; // Import nécessaire pour le clustering
+import com.google.maps.android.clustering.ClusterItem;
 import com.google.firebase.firestore.Exclude;
 
 import java.util.Date;
 
-/**
- * Modèle représentant un incident signalé par un citoyen.
- * Adapté pour Firebase Firestore et le Clustering Google Maps.
- * Auteur : Asmaa
- */
-public class Incident implements ClusterItem { // Implements ClusterItem ajouté
+public class Incident implements ClusterItem {
 
     // --- Constantes de statut ---
     public static final String STATUT_NOUVEAU = "Nouveau";
     public static final String STATUT_EN_COURS = "En cours";
     public static final String STATUT_TRAITE = "Traité";
 
-    // --- Champs ---
-    private String id;               // id_incident (Firestore Document ID)
-    private String photoUrl;         // photo_url
-    private String description;      // description
-    private String idCategorie;      // FK vers collection categories
-    private double latitude;         // latitude
-    private double longitude;        // longitude
-    private Date dateSignalement;    // Date formatée
-    private String statut;           // Nouveau / En cours / Traité
-    private String idUtilisateur;    // FK vers collection users (Auth UID)
+    // --- Champs principaux (Stockés dans Firestore) ---
+    private String id;
+    private String photoUrl;
+    private String description;
+    private String idCategorie;
+    private double latitude;
+    private double longitude;
+    private Date dateSignalement;
+    private String statut;
+    private String idUtilisateur;
 
+    // --- Champs dénormalisés (Pour l'affichage rapide) ---
     private String nomCategorie;
     private String nomUtilisateur;
-    // Note: 'userName' semblait redondant avec 'nomUtilisateur', je garde les deux pour compatibilité
-    private String userName;
+    // NOTE : Suppression de 'userName' pour éviter les doublons et erreurs d'affichage
 
-    // --- Constructeur Vide (OBLIGATOIRE POUR FIREBASE) ---
+    // --- Constructeur Vide (Requis par Firestore) ---
     public Incident() {
+        // Valeur par défaut
+        this.statut = STATUT_NOUVEAU;
     }
 
     // --- Constructeur Complet ---
@@ -54,7 +51,6 @@ public class Incident implements ClusterItem { // Implements ClusterItem ajouté
     }
 
     // --- Getters / Setters ---
-
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
@@ -85,11 +81,9 @@ public class Incident implements ClusterItem { // Implements ClusterItem ajouté
     public String getNomCategorie() { return nomCategorie; }
     public void setNomCategorie(String nomCategorie) { this.nomCategorie = nomCategorie; }
 
+    // C'est le seul champ pour le nom de l'utilisateur désormais
     public String getNomUtilisateur() { return nomUtilisateur; }
     public void setNomUtilisateur(String nomUtilisateur) { this.nomUtilisateur = nomUtilisateur; }
-
-    public String getUserName() { return userName; }
-    public void setUserName(String userName) { this.userName = userName; }
 
     // --- Utilitaires ---
     @Exclude
@@ -99,14 +93,10 @@ public class Incident implements ClusterItem { // Implements ClusterItem ajouté
 
     @Override
     public String toString() {
-        return "[" + statut + "] " + description + " (" + latitude + "," + longitude + ")";
+        return "[" + statut + "] " + description;
     }
 
-    // =================================================================
-    // IMPLÉMENTATION DE L'INTERFACE ClusterItem
-    // Ces méthodes sont utilisées par le ClusterManager pour placer les marqueurs
-    // =================================================================
-
+    // --- Implémentation de ClusterItem (Google Maps) ---
     @Override
     public LatLng getPosition() {
         return new LatLng(latitude, longitude);
@@ -114,16 +104,11 @@ public class Incident implements ClusterItem { // Implements ClusterItem ajouté
 
     @Override
     public String getTitle() {
-        // Le titre du marqueur sera le nom de la catégorie (ex: "Accident")
         return nomCategorie != null ? nomCategorie : "Incident";
     }
 
     @Override
     public String getSnippet() {
-        // Le sous-titre du marqueur sera la description
         return description;
     }
-
-    // Note: getZIndex() est optionnel selon la version de la librairie,
-    // par défaut il retourne null/0.0f si non implémenté.
 }

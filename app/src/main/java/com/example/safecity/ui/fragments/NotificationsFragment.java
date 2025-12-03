@@ -4,6 +4,8 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -13,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.safecity.R;
 import com.example.safecity.model.NotificationApp;
 import com.example.safecity.ui.adapters.NotificationAdapter;
+import com.example.safecity.utils.FirestoreRepository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,7 @@ public class NotificationsFragment extends Fragment {
 
     private RecyclerView recyclerView;
     private NotificationAdapter adapter;
+    private FirestoreRepository firestoreRepo;
 
     @Nullable
     @Override
@@ -35,13 +39,38 @@ public class NotificationsFragment extends Fragment {
         recyclerView = view.findViewById(R.id.recycler_notifications);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // Données factices pour la démo (En attendant de relier à Firebase)
-        List<NotificationApp> fakeNotifs = new ArrayList<>();
-        fakeNotifs.add(new NotificationApp("Bienvenue !", "Ravi de vous voir sur SafeCity.", "info"));
-        fakeNotifs.add(new NotificationApp("Incident Validé", "Votre signalement 'Accident' a été validé.", "validation"));
-        fakeNotifs.add(new NotificationApp("Alerte Proximité", "Travaux signalés rue de la Paix.", "alerte"));
-
-        adapter = new NotificationAdapter(getContext(), fakeNotifs);
+        // 1. Initialisation avec une liste vide pour éviter les erreurs avant le chargement
+        adapter = new NotificationAdapter(getContext(), new ArrayList<>());
         recyclerView.setAdapter(adapter);
+
+        // 2. Initialisation du repository
+        firestoreRepo = new FirestoreRepository();
+
+        // 3. Chargement des données réelles depuis Firestore
+        loadNotifications();
+    }
+
+    private void loadNotifications() {
+        firestoreRepo.getNotifications(new FirestoreRepository.OnNotificationsLoadedListener() {
+            @Override
+            public void onNotificationsLoaded(List<NotificationApp> notifications) {
+                // On vérifie que le fragment est toujours actif avant de toucher à l'UI
+                if (isAdded() && adapter != null) {
+                    // Mise à jour de l'adaptateur via la méthode créée à l'étape 1
+                    adapter.updateData(notifications);
+
+                    if (notifications.isEmpty()) {
+                        Toast.makeText(getContext(), "Aucune notification pour le moment", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 }

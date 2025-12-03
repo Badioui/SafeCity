@@ -22,7 +22,7 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.material.chip.ChipGroup;
-import com.google.maps.android.clustering.ClusterManager; // <--- Import ClusterManager
+import com.google.maps.android.clustering.ClusterManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,13 +31,11 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
 
     private GoogleMap googleMap;
     private FirestoreRepository firestoreRepo;
-    private ClusterManager<Incident> clusterManager; // <--- Gestionnaire de clusters
+    private ClusterManager<Incident> clusterManager;
 
-    // Variables pour stocker la position cible reçue en argument
     private Double targetLat = null;
     private Double targetLng = null;
 
-    // Champs pour le filtrage
     private List<Incident> allIncidents = new ArrayList<>();
     private ChipGroup chipGroup;
 
@@ -66,8 +64,9 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
             mapFragment.getMapAsync(this);
         }
 
-        // --- GESTION DES CLICS SUR LES FILTRES (CHIPS) ---
         chipGroup = view.findViewById(R.id.chip_group_filters);
+
+        // --- MISE À JOUR DU LISTENER DES CHIPS ---
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.chip_all) {
                 updateMapMarkers(allIncidents);
@@ -75,11 +74,14 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
                 filterMarkers("Accident");
             } else if (checkedId == R.id.chip_vol) {
                 filterMarkers("Vol");
-            } else if (checkedId == R.id.chip_travaux) {
-                filterMarkers("Travaux");
             } else if (checkedId == R.id.chip_incendie) {
                 filterMarkers("Incendie");
+            } else if (checkedId == R.id.chip_panne) { // NOUVEAU
+                filterMarkers("Panne");
+            } else if (checkedId == R.id.chip_autre) { // NOUVEAU
+                filterMarkers("Autre");
             }
+            // "Travaux" a été retiré car absent de Firebase
         });
     }
 
@@ -87,7 +89,11 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
 
-        // Position initiale
+        // Padding pour éviter que les Chips ne cachent le bouton "Ma Position"
+        // 180px est suffisant pour le HorizontalScrollView + Chips
+        int topPadding = 180;
+        this.googleMap.setPadding(0, topPadding, 0, 0);
+
         if (targetLat != null && targetLng != null) {
             LatLng target = new LatLng(targetLat, targetLng);
             this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16));
@@ -98,40 +104,34 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
 
         this.googleMap.getUiSettings().setZoomControlsEnabled(true);
 
-        // --- CONFIGURATION DU CLUSTER MANAGER ---
-        // 1. Initialiser le ClusterManager avec le contexte et la carte
         clusterManager = new ClusterManager<>(getContext(), googleMap);
-
-        // 2. Déléguer les événements de la carte au ClusterManager
-        // C'est lui qui va gérer le zoom et les clics sur les marqueurs maintenant
         googleMap.setOnCameraIdleListener(clusterManager);
         googleMap.setOnMarkerClickListener(clusterManager);
 
-        // (Optionnel) Ajout d'une info-bulle ou action au clic sur un incident individuel
-        // clusterManager.setOnClusterItemClickListener(incident -> { ... });
-
         enableUserLocation();
-        loadIncidentMarkers(); // Chargement initial des données
+        loadIncidentMarkers();
     }
 
     private void loadIncidentMarkers() {
         firestoreRepo.getIncidentsRealtime(new FirestoreRepository.OnDataLoadListener() {
             @Override
             public void onIncidentsLoaded(List<Incident> incidents) {
+                if (!isAdded()) return;
                 allIncidents = incidents;
 
-                // Ré-appliquer le filtre actuel si nécessaire
+                // --- MISE À JOUR DE LA LOGIQUE DE RE-FILTRAGE ---
                 int checkedId = chipGroup.getCheckedChipId();
                 if (checkedId == R.id.chip_accident) filterMarkers("Accident");
                 else if (checkedId == R.id.chip_vol) filterMarkers("Vol");
-                else if (checkedId == R.id.chip_travaux) filterMarkers("Travaux");
                 else if (checkedId == R.id.chip_incendie) filterMarkers("Incendie");
+                else if (checkedId == R.id.chip_panne) filterMarkers("Panne"); // NOUVEAU
+                else if (checkedId == R.id.chip_autre) filterMarkers("Autre"); // NOUVEAU
                 else updateMapMarkers(allIncidents);
             }
 
             @Override
             public void onError(Exception e) {
-                if (getContext() != null) {
+                if (isAdded() && getContext() != null) {
                     Toast.makeText(getContext(), "Erreur chargement carte", Toast.LENGTH_SHORT).show();
                 }
             }
@@ -142,6 +142,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         List<Incident> filteredList = new ArrayList<>();
         if (allIncidents != null) {
             for (Incident inc : allIncidents) {
+                // Le toLowerCase permet de gérer "Panne", "panne", "PANNE" sans souci
                 if (inc.getNomCategorie() != null &&
                         inc.getNomCategorie().toLowerCase().contains(categoryName.toLowerCase())) {
                     filteredList.add(inc);
@@ -151,24 +152,17 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         updateMapMarkers(filteredList);
     }
 
-    // --- MISE À JOUR VIA CLUSTER MANAGER ---
     private void updateMapMarkers(List<Incident> incidentsToDisplay) {
         if (googleMap == null || incidentsToDisplay == null || clusterManager == null) return;
 
-        // 1. On nettoie les items du ClusterManager (pas googleMap.clear())
         clusterManager.clearItems();
 
         for (Incident inc : incidentsToDisplay) {
-            // Filtrer les coordonnées invalides
             if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
                 continue;
             }
-
-            // 2. On ajoute l'incident (qui est un ClusterItem) au manager
             clusterManager.addItem(inc);
         }
-
-        // 3. On force le recalcul des clusters
         clusterManager.cluster();
     }
 
@@ -180,16 +174,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
                 googleMap.setMyLocationEnabled(true);
                 googleMap.getUiSettings().setMyLocationButtonEnabled(true);
             }
-        }
-    }
-
-    public void focusOnLocation(double lat, double lng) {
-        if (googleMap != null) {
-            LatLng pos = new LatLng(lat, lng);
-            googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 16));
-        } else {
-            targetLat = lat;
-            targetLng = lng;
         }
     }
 }

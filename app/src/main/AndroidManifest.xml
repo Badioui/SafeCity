@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
-    <!-- Indique que l'app utilise la caméra, mais peut fonctionner sans (ex: Chromebooks) -->
+    <!-- Indique que l'app utilise la caméra, mais peut fonctionner sans -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -29,7 +29,7 @@
 
         <!-- 2. ACTIVITÉS -->
 
-        <!-- LOGIN ACTIVITY : C'est maintenant le point de départ (LAUNCHER) -->
+        <!-- LOGIN ACTIVITY (Launcher) -->
         <activity
             android:name=".LoginActivity"
             android:exported="true">
@@ -39,20 +39,35 @@
             </intent-filter>
         </activity>
 
-        <!-- REGISTER ACTIVITY -->
         <activity android:name=".RegisterActivity" />
 
-        <!-- MAIN ACTIVITY : Devient une activité normale (accessible après le login) -->
+        <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
-            android:exported="true" />
+            android:exported="true">
+            <!-- Ce filtre permet au téléphone de reconnaître l'action "MainActivity" envoyée par la notif -->
+            <intent-filter>
+                <action android:name="MainActivity" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
-        <!-- 3. CLÉ API GOOGLE MAPS -->
+        <!-- 3. SERVICES (INDISPENSABLE POUR LES NOTIFS) -->
+        <!-- Déclaration du service qui reçoit les messages Firebase -->
+        <service
+            android:name=".utils.MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- 4. CLÉ API GOOGLE MAPS -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyA_S84qOros3UzUHDam0G6bDCZIRS30U_Y" />
 
-        <!-- 4. FILE PROVIDER (Pour la Caméra) -->
+        <!-- 5. FILE PROVIDER (Pour la Caméra) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.example.safecity.fileprovider"

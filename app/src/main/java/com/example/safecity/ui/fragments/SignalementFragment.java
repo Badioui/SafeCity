@@ -76,6 +76,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     private String currentPhotoPath;
     private String finalPhotoPath;
 
+    // Variables pour le mode ÉDITION
     private String editingIncidentId = null;
     private Incident incidentToEdit;
 
@@ -120,19 +121,22 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         cbNoGps.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
                 if (locationHelper != null) locationHelper.stopLocationUpdates();
-                lastKnownLocation = null;
-                tvGpsLocation.setText("Aucune position précise (Ville/Pays uniquement)");
+                if (incidentToEdit == null) lastKnownLocation = null;
+                tvGpsLocation.setText("Position manuelle ou conservée");
             } else {
                 checkLocationPermissionAndStart();
             }
         });
     }
 
+    // --- 1. CHARGEMENT ET INIT ---
+
     private void loadCategoriesAndInit() {
         firestoreRepo.getCategories(new FirestoreRepository.OnCategoriesLoadedListener() {
             @Override
             public void onCategoriesLoaded(List<Categorie> cats) {
                 if (!isAdded() || getActivity() == null) return;
+
                 if (cats != null && !cats.isEmpty()) {
                     ArrayAdapter<Categorie> adapter = new ArrayAdapter<>(getContext(),
                             android.R.layout.simple_spinner_item, cats);
@@ -144,6 +148,8 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
                 if (editingIncidentId != null) {
                     tvHeader.setText("Modifier le signalement");
+                    btnSubmit.setText("Mettre à jour");
+                    loadIncidentData(editingIncidentId);
                 } else {
                     checkLocationPermissionAndStart();
                 }
@@ -152,6 +158,49 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             public void onError(Exception e) {}
         });
     }
+
+    // --- 2. CHARGEMENT DES DONNÉES (MODE ÉDITION) ---
+
+    private void loadIncidentData(String id) {
+        firestoreRepo.getIncident(id, new FirestoreRepository.OnIncidentLoadedListener() {
+            @Override
+            public void onIncidentLoaded(Incident incident) {
+                if (!isAdded()) return;
+
+                incidentToEdit = incident;
+                etDescription.setText(incident.getDescription());
+
+                if (incident.getNomCategorie() != null && spinnerType.getAdapter() != null) {
+                    for (int i = 0; i < spinnerType.getAdapter().getCount(); i++) {
+                        Categorie cat = (Categorie) spinnerType.getAdapter().getItem(i);
+                        if (cat.getNomCategorie().equals(incident.getNomCategorie())) {
+                            spinnerType.setSelection(i);
+                            break;
+                        }
+                    }
+                }
+
+                if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty()) {
+                    imgPhotoPreview.setVisibility(View.VISIBLE);
+                    Glide.with(requireContext()).load(incident.getPhotoUrl()).into(imgPhotoPreview);
+                }
+
+                cbNoGps.setChecked(true);
+                tvGpsLocation.setText("Position originale conservée");
+
+                lastKnownLocation = new Location("Firestore");
+                lastKnownLocation.setLatitude(incident.getLatitude());
+                lastKnownLocation.setLongitude(incident.getLongitude());
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // --- 3. SAUVEGARDE ---
 
     private void prepareAndSaveIncident() {
         String desc = etDescription.getText().toString().trim();
@@ -173,8 +222,10 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser != null) {
-            incident.setIdUtilisateur(currentUser.getUid());
-            incident.setNomUtilisateur(currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonyme");
+            if (editingIncidentId == null) {
+                incident.setIdUtilisateur(currentUser.getUid());
+                incident.setNomUtilisateur(currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonyme");
+            }
         } else {
             Toast.makeText(getContext(), "Connectez-vous", Toast.LENGTH_SHORT).show();
             return;
@@ -191,82 +242,115 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (finalPhotoPath != null) {
             uploadImageAndSave(incident);
         } else {
-            incident.setPhotoUrl("");
+            if (editingIncidentId == null) incident.setPhotoUrl("");
             saveToFirestore(incident);
         }
     }
 
+    // --- MODIFICATION : GESTION ROBUSTE DE LA SUPPRESSION DU FICHIER ---
     private void uploadImageAndSave(Incident incident) {
         if (getContext() == null) return;
         Uri fileUri = Uri.fromFile(new File(finalPhotoPath));
         String fileName = "incident_" + UUID.randomUUID().toString() + ".jpg";
         StorageReference storageRef = FirebaseStorage.getInstance().getReference().child("incident_images/" + fileName);
 
-        storageRef.putFile(fileUri).addOnSuccessListener(taskSnapshot -> {
-            storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                incident.setPhotoUrl(uri.toString());
-                saveToFirestore(incident);
-            });
-        }).addOnFailureListener(e -> {
-            if (isAdded()) {
-                btnSubmit.setEnabled(true);
-                Toast.makeText(getContext(), "Erreur upload image", Toast.LENGTH_SHORT).show();
+        storageRef.putFile(fileUri)
+                .addOnSuccessListener(taskSnapshot -> {
+                    storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                        incident.setPhotoUrl(uri.toString());
+                        saveToFirestore(incident);
+
+                        // Nettoyage en cas de succès
+                        deleteTempFile(finalPhotoPath);
+                    });
+                })
+                .addOnFailureListener(e -> {
+                    if (isAdded()) {
+                        btnSubmit.setEnabled(true);
+                        Toast.makeText(getContext(), "Erreur upload image", Toast.LENGTH_SHORT).show();
+
+                        // Nettoyage en cas d'échec aussi !
+                        deleteTempFile(finalPhotoPath);
+                    }
+                });
+    }
+
+    // --- NOUVELLE MÉTHODE UTILITAIRE ---
+    private void deleteTempFile(String path) {
+        if (path == null) return;
+        try {
+            File file = new File(path);
+            if (file.exists()) {
+                file.delete();
             }
-        });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void saveToFirestore(Incident incident) {
-        firestoreRepo.addIncident(incident, new FirestoreRepository.OnFirestoreTaskComplete() {
-            @Override
-            public void onSuccess() {
-                if (isAdded()) {
-                    // --- GAMIFICATION : AJOUTER 10 POINTS ---
-                    FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-                    if (user != null) {
-                        firestoreRepo.incrementUserScore(user.getUid(), 10);
+        if (editingIncidentId != null) {
+            firestoreRepo.updateIncidentDetails(incident, new FirestoreRepository.OnFirestoreTaskComplete() {
+                @Override
+                public void onSuccess() {
+                    if (isAdded()) {
+                        Toast.makeText(getContext(), "Modification enregistrée !", Toast.LENGTH_SHORT).show();
+                        getParentFragmentManager().popBackStack();
                     }
-                    // ----------------------------------------
+                }
+                @Override
+                public void onError(Exception e) {
+                    if (isAdded()) {
+                        btnSubmit.setEnabled(true);
+                        Toast.makeText(getContext(), "Erreur maj: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        } else {
+            firestoreRepo.addIncident(incident, new FirestoreRepository.OnFirestoreTaskComplete() {
+                @Override
+                public void onSuccess() {
+                    if (isAdded()) {
+                        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                        if (user != null) firestoreRepo.incrementUserScore(user.getUid(), 10);
 
-                    Toast.makeText(getContext(), "Envoyé ! (+10 pts)", Toast.LENGTH_SHORT).show();
-                    getParentFragmentManager().popBackStack();
+                        Toast.makeText(getContext(), "Envoyé ! (+10 pts)", Toast.LENGTH_SHORT).show();
+                        getParentFragmentManager().popBackStack();
+                    }
                 }
-            }
-            @Override
-            public void onError(Exception e) {
-                if (isAdded()) {
-                    btnSubmit.setEnabled(true);
-                    Toast.makeText(getContext(), "Erreur: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                @Override
+                public void onError(Exception e) {
+                    if (isAdded()) {
+                        btnSubmit.setEnabled(true);
+                        Toast.makeText(getContext(), "Erreur: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
-    // --- LOGIQUE PHOTO OPTIMISÉE (THREAD BACKGROUND) ---
+    // --- LOGIQUE PHOTO ---
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == Activity.RESULT_OK) {
-
-            // On affiche le placeholder en attendant
             Toast.makeText(getContext(), "Traitement de l'image...", Toast.LENGTH_SHORT).show();
-
-            // Exécution sur le thread disque (Background)
             AppExecutors.getInstance().diskIO().execute(() -> {
                 try {
                     File processedFile = null;
                     if (requestCode == REQUEST_IMAGE_CAPTURE) {
                         File rawFile = new File(currentPhotoPath);
                         processedFile = ImageUtils.compressImage(rawFile);
+                        if (rawFile.exists()) {
+                            rawFile.delete();
+                        }
                     } else if (requestCode == REQUEST_GALLERY_PICK && data != null) {
                         Uri selectedImageUri = data.getData();
                         processedFile = ImageUtils.compressUri(getContext(), selectedImageUri);
                     }
-
                     if (processedFile != null) {
                         finalPhotoPath = processedFile.getAbsolutePath();
-
-                        // Retour sur le thread principal pour l'UI
                         AppExecutors.getInstance().mainThread().execute(() -> {
                             if (isAdded()) {
                                 imgPhotoPreview.setVisibility(View.VISIBLE);
@@ -276,15 +360,12 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
-                    AppExecutors.getInstance().mainThread().execute(() -> {
-                        if (isAdded()) Toast.makeText(getContext(), "Erreur traitement image", Toast.LENGTH_SHORT).show();
-                    });
                 }
             });
         }
     }
 
-    // --- GPS & Permissions (Code standard) ---
+    // --- GPS & Permissions ---
 
     private void checkLocationPermissionAndStart() {
         if (cbNoGps.isChecked()) return;

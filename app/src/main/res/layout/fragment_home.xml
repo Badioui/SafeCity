@@ -35,42 +35,50 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Tous" />
+                android:text="Tous"
+                android:textColor="@android:color/black" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_accident"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Accident" />
+                android:text="Accident"
+                android:textColor="@android:color/black" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_vol"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Vol" />
+                android:text="Vol"
+                android:textColor="@android:color/black"/>
 
+            <!-- REMPLACEMENT : Travaux -> Panne -->
             <com.google.android.material.chip.Chip
-                android:id="@+id/chip_travaux"
+                android:id="@+id/chip_panne"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Travaux" />
+                android:text="Panne"
+                android:textColor="@android:color/black"/>
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_incendie"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Incendie" />
+                android:text="Incendie"
+                android:textColor="@android:color/black"/>
 
+            <!-- AJOUT : Catégorie Autre -->
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_autre"
                 style="@style/Widget.MaterialComponents.Chip.Choice"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Autre" />
+                android:text="Autre"
+                android:textColor="@android:color/black"/>
 
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>

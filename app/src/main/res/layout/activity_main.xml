@@ -57,6 +57,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/top_bar" />
 
+    <!-- BOUTON STATISTIQUES (Ajouté ici) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_stats"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_info"
+        android:contentDescription="Statistiques"
+        app:backgroundTint="@color/light_bg_secondary"
+        app:tint="@color/light_text_primary"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/btn_sos"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- BOUTON SOS (Flottant) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btn_sos"
