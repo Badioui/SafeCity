@@ -61,14 +61,25 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         handleNotificationIntent(getIntent());
 
         // ==================================================================
-        // 1. GESTION DES NOTIFICATIONS
+        // 1. GESTION DES NOTIFICATIONS (Abonnement aux topics FCM)
         // ==================================================================
         FirebaseMessaging.getInstance().subscribeToTopic("incidents_all")
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
-                        Log.e("FCM", "Echec abonnement topic", task.getException());
+                        Log.e("FCM", "Echec abonnement topic incidents", task.getException());
                     }
                 });
+
+        // ABONNEMENT AJOUTÉ : Alertes Officielles
+        FirebaseMessaging.getInstance().subscribeToTopic("official_alerts")
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.e("FCM", "Échec abonnement alertes officielles", task.getException());
+                    } else {
+                        Log.i("FCM", "Abonnement topic official_alerts réussi.");
+                    }
+                });
+        // Fin de l'abonnement
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -89,11 +100,6 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
             lancerAppelUrgence();
             return true;
         });
-
-        // --- CORRECTION SÉCURITÉ (Problème n°8) ---
-        // L'ancien bloc qui gérait le bouton "Stats" ici a été SUPPRIMÉ.
-        // La gestion des statistiques et du rôle admin est désormais centralisée
-        // et sécurisée dans le HomeFragment via Firestore.
 
         // ==================================================================
         // 3. GESTION DE L'INTERFACE

@@ -6,6 +6,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
@@ -30,6 +32,7 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class HomeFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
@@ -98,7 +101,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                             isAdminMode = true;
                             if (fabStats != null) {
                                 fabStats.setVisibility(View.VISIBLE);
-                                fabStats.setOnClickListener(v -> showStatisticsDialog());
+                                // MODIFICATION : Menu Admin pour choisir Stats ou Alerte
+                                fabStats.setOnClickListener(v -> showAdminMenu());
                             }
                         } else {
                             isAdminMode = false;
@@ -174,8 +178,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         if (checkedId == R.id.chip_accident) categoryFilter = "Accident";
         else if (checkedId == R.id.chip_vol) categoryFilter = "Vol";
         else if (checkedId == R.id.chip_incendie) categoryFilter = "Incendie";
-        else if (checkedId == R.id.chip_panne) categoryFilter = "Panne"; // Remplace Travaux
-        else if (checkedId == R.id.chip_autre) categoryFilter = "Autre"; // Nouveau
+        else if (checkedId == R.id.chip_panne) categoryFilter = "Panne";
+        else if (checkedId == R.id.chip_autre) categoryFilter = "Autre";
 
         for (Incident i : allIncidents) {
             boolean matchesSearch = true;
@@ -217,7 +221,95 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         }
     }
 
-    // --- ACTIONS ADAPTER ---
+    // ==================================================================
+    // NOUVELLES MÉTHODES D'ALERTE OFFICIELLE (Étape 2)
+    // ==================================================================
+
+    /**
+     * Affiche un menu de choix pour l'administrateur : Statistiques ou Envoyer Alerte.
+     */
+    private void showAdminMenu() {
+        if (getContext() == null) return;
+        String[] options = {"📊 Voir Statistiques", "📢 Envoyer Alerte Officielle"};
+        new AlertDialog.Builder(getContext())
+                .setTitle("Menu Administrateur")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) showStatisticsDialog();
+                    else showSendAlertDialog();
+                })
+                .show();
+    }
+
+    /**
+     * Affiche une boîte de dialogue pour rédiger et envoyer une Alerte Officielle.
+     */
+    private void showSendAlertDialog() {
+        if (getContext() == null) return;
+
+        // Création dynamique du layout du dialogue
+        LinearLayout layout = new LinearLayout(getContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
+        // Ajout de padding pour l'esthétique
+        layout.setPadding(50, 40, 50, 10);
+
+        final EditText etTitle = new EditText(getContext());
+        etTitle.setHint("Titre (ex: Alerte Météo)");
+        layout.addView(etTitle);
+
+        final EditText etMessage = new EditText(getContext());
+        etMessage.setHint("Message (ex: Tempête en approche, restez chez vous)");
+        etMessage.setLines(4); // Permet d'avoir un champ message plus grand
+        etMessage.setMinLines(2);
+        etMessage.setMaxLines(6);
+        layout.addView(etMessage);
+
+        new AlertDialog.Builder(getContext())
+                .setView(layout)
+                .setTitle("📢 Envoyer une Alerte Officielle")
+                .setPositiveButton("Envoyer", (dialog, which) -> {
+                    String title = etTitle.getText().toString().trim();
+                    String body = etMessage.getText().toString().trim();
+
+                    if (!title.isEmpty() && !body.isEmpty()) {
+                        sendAlertToFirebase(title, body);
+                    } else {
+                        Toast.makeText(getContext(), "Le titre et le message ne peuvent être vides.", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    /**
+     * Crée un objet NotificationApp et l'envoie à la nouvelle collection official_alerts dans Firestore.
+     * Cette action déclenchera la Cloud Function (Étape 3).
+     */
+    private void sendAlertToFirebase(String title, String message) {
+        if (getContext() == null) return;
+
+        NotificationApp alert = new NotificationApp();
+        alert.setTitre(title);
+        alert.setMessage(message);
+        alert.setDate(new Date());
+        alert.setType("ALERTE_OFFICIELLE"); // Type spécial pour le client et le backend (si besoin)
+
+        firestoreRepo.addOfficialAlert(alert, new FirestoreRepository.OnFirestoreTaskComplete() {
+            @Override
+            public void onSuccess() {
+                // Confirmation d'envoi et ajout à la collection "notifications" pour l'historique local de l'admin
+                Toast.makeText(getContext(), "Alerte envoyée à la population !", Toast.LENGTH_LONG).show();
+                firestoreRepo.addNotification(alert);
+            }
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(getContext(), "Erreur lors de l'envoi de l'alerte : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // ==================================================================
+    // ACTIONS ADAPTER
+    // ==================================================================
 
     @Override
     public void onValidateClick(Incident incident) {

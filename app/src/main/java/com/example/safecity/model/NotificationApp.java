@@ -27,4 +27,16 @@ public class NotificationApp {
     public String getMessage() { return message; }
     public Date getDate() { return date; }
     public String getType() { return type; }
+
+    public void setTitre(String title) {
+    }
+
+    public void setMessage(String message) {
+    }
+
+    public void setDate(Date date) {
+    }
+
+    public void setType(String alerteOfficielle) {
+    }
 }

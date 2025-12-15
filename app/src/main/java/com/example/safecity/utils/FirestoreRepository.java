@@ -105,8 +105,17 @@ public class FirestoreRepository {
                 .addOnFailureListener(e -> { });
     }
 
+    // 5. AJOUTER ALERTE OFFICIELLE (Pour déclencher la Cloud Function)
+    public void addOfficialAlert(NotificationApp alert, OnFirestoreTaskComplete listener) {
+        db.collection("official_alerts") // Nouvelle collection dédiée pour les alertes officielles
+                .add(alert)
+                .addOnSuccessListener(aVoid -> listener.onSuccess())
+                .addOnFailureListener(listener::onError);
+    }
+
     // AJOUT : AJOUTER UNE NOTIFICATION (Système)
     public void addNotification(NotificationApp notification) {
+        // Utilisé pour l'historique local ou les notifications standard
         db.collection("notifications").add(notification);
     }
 
@@ -114,7 +123,7 @@ public class FirestoreRepository {
     // MÉTHODES DE LECTURE (READ)
     // ==================================================================
 
-    // 5. LIRE TOUS LES INCIDENTS (Temps réel)
+    // 6. LIRE TOUS LES INCIDENTS (Temps réel)
     public ListenerRegistration getIncidentsRealtime(OnDataLoadListener listener) {
         return db.collection("incidents")
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
@@ -130,7 +139,7 @@ public class FirestoreRepository {
                 });
     }
 
-    // 6. LIRE MES INCIDENTS
+    // 7. LIRE MES INCIDENTS
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
         db.collection("incidents")
                 .whereEqualTo("idUtilisateur", userId)
@@ -143,7 +152,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 7. RÉCUPÉRER UN SEUL INCIDENT
+    // 8. RÉCUPÉRER UN SEUL INCIDENT
     public void getIncident(String incidentId, OnIncidentLoadedListener listener) {
         db.collection("incidents").document(incidentId).get()
                 .addOnSuccessListener(doc -> {
@@ -156,7 +165,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 8. RÉCUPÉRER UN UTILISATEUR
+    // 9. RÉCUPÉRER UN UTILISATEUR
     public void getUser(String uid, OnUserLoadedListener listener) {
         db.collection("users").document(uid).get()
                 .addOnSuccessListener(documentSnapshot -> {
@@ -169,7 +178,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // AJOUT : RÉCUPÉRER LES NOTIFICATIONS
+    // 10. RÉCUPÉRER LES NOTIFICATIONS
     public void getNotifications(OnNotificationsLoadedListener listener) {
         db.collection("notifications")
                 .orderBy("date", Query.Direction.DESCENDING)
@@ -187,7 +196,7 @@ public class FirestoreRepository {
     // SUPPRESSION & UTILITAIRES
     // ==================================================================
 
-    // 9. SUPPRIMER INCIDENT
+    // 11. SUPPRIMER INCIDENT
     public void deleteIncident(String incidentId, String photoUrl, OnFirestoreTaskComplete listener) {
         if (incidentId == null || incidentId.isEmpty()) {
             listener.onError(new Exception("ID invalide"));
@@ -216,7 +225,7 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 10. ROLES ET CATEGORIES
+    // 12. ROLES ET CATEGORIES
     public void getRoles(OnRolesLoadedListener listener) {
         db.collection("roles").get().addOnSuccessListener(q -> {
             if (q != null) listener.onRolesLoaded(q.toObjects(Role.class));
