@@ -8,7 +8,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.app.AlertDialog;
+import android.widget.RadioGroup;
+import android.widget.RadioButton;
+import android.graphics.Color;
+import android.graphics.Typeface;
+
+// REMOVED: import android.app.AlertDialog;
+// ADDED: Material Design Dialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -222,17 +229,18 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     }
 
     // ==================================================================
-    // NOUVELLES MÉTHODES D'ALERTE OFFICIELLE (Étape 2)
+    // NOUVELLES MÉTHODES D'ALERTE OFFICIELLE (Étape 2) - AMÉLIORÉES
     // ==================================================================
 
     /**
-     * Affiche un menu de choix pour l'administrateur : Statistiques ou Envoyer Alerte.
+     * Affiche un menu de choix pour l'administrateur.
      */
     private void showAdminMenu() {
         if (getContext() == null) return;
-        String[] options = {"📊 Voir Statistiques", "📢 Envoyer Alerte Officielle"};
-        new AlertDialog.Builder(getContext())
-                .setTitle("Menu Administrateur")
+        String[] options = {"📊 Voir Tableau de Bord", "📢 Diffuser Alerte Officielle"};
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Administration")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) showStatisticsDialog();
                     else showSendAlertDialog();
@@ -241,39 +249,79 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     }
 
     /**
-     * Affiche une boîte de dialogue pour rédiger et envoyer une Alerte Officielle.
+     * Affiche une boîte de dialogue PROFESSIONNELLE pour envoyer une alerte.
      */
     private void showSendAlertDialog() {
         if (getContext() == null) return;
 
-        // Création dynamique du layout du dialogue
+        // Layout container
         LinearLayout layout = new LinearLayout(getContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        // Ajout de padding pour l'esthétique
-        layout.setPadding(50, 40, 50, 10);
+        layout.setPadding(60, 40, 60, 10);
+
+        // -- Section Priorité --
+        TextView tvPriority = new TextView(getContext());
+        tvPriority.setText("Niveau d'urgence");
+        tvPriority.setTypeface(null, Typeface.BOLD);
+        tvPriority.setTextColor(Color.DKGRAY);
+        layout.addView(tvPriority);
+
+        RadioGroup rgPriority = new RadioGroup(getContext());
+        rgPriority.setOrientation(LinearLayout.HORIZONTAL);
+        rgPriority.setPadding(0, 10, 0, 30);
+
+        RadioButton rbInfo = new RadioButton(getContext());
+        rbInfo.setText("Information");
+        rbInfo.setChecked(true);
+
+        RadioButton rbUrgent = new RadioButton(getContext());
+        rbUrgent.setText("URGENCE");
+        rbUrgent.setTextColor(Color.RED);
+        rbUrgent.setTypeface(null, Typeface.BOLD);
+
+        rgPriority.addView(rbInfo);
+        rgPriority.addView(rbUrgent);
+        layout.addView(rgPriority);
+
+        // -- Section Titre --
+        TextView tvTitle = new TextView(getContext());
+        tvTitle.setText("Titre de l'alerte");
+        tvTitle.setTypeface(null, Typeface.BOLD);
+        tvTitle.setTextColor(Color.DKGRAY);
+        layout.addView(tvTitle);
 
         final EditText etTitle = new EditText(getContext());
-        etTitle.setHint("Titre (ex: Alerte Météo)");
+        etTitle.setHint("Ex: Tempête, Coupure d'eau...");
         layout.addView(etTitle);
 
+        // -- Section Message --
+        TextView tvMessage = new TextView(getContext());
+        tvMessage.setText("Message détaillé");
+        tvMessage.setTypeface(null, Typeface.BOLD);
+        tvMessage.setTextColor(Color.DKGRAY);
+        tvMessage.setPadding(0, 20, 0, 0);
+        layout.addView(tvMessage);
+
         final EditText etMessage = new EditText(getContext());
-        etMessage.setHint("Message (ex: Tempête en approche, restez chez vous)");
-        etMessage.setLines(4); // Permet d'avoir un champ message plus grand
-        etMessage.setMinLines(2);
-        etMessage.setMaxLines(6);
+        etMessage.setHint("Instructions pour les citoyens...");
+        etMessage.setLines(3);
         layout.addView(etMessage);
 
-        new AlertDialog.Builder(getContext())
+        // UPDATED: Using MaterialAlertDialogBuilder avec formulaire complet
+        new MaterialAlertDialogBuilder(requireContext())
                 .setView(layout)
-                .setTitle("📢 Envoyer une Alerte Officielle")
-                .setPositiveButton("Envoyer", (dialog, which) -> {
-                    String title = etTitle.getText().toString().trim();
+                .setTitle("📢 Diffuser une Alerte")
+                .setPositiveButton("ENVOYER", (dialog, which) -> {
+                    String titleInput = etTitle.getText().toString().trim();
                     String body = etMessage.getText().toString().trim();
+                    boolean isUrgent = rbUrgent.isChecked();
 
-                    if (!title.isEmpty() && !body.isEmpty()) {
-                        sendAlertToFirebase(title, body);
+                    if (!titleInput.isEmpty() && !body.isEmpty()) {
+                        // Ajout automatique du préfixe si Urgent
+                        String finalTitle = isUrgent ? "🚨 [URGENT] " + titleInput : "ℹ️ " + titleInput;
+                        sendAlertToFirebase(finalTitle, body);
                     } else {
-                        Toast.makeText(getContext(), "Le titre et le message ne peuvent être vides.", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Le titre et le message sont requis.", Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton("Annuler", null)
@@ -281,8 +329,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     }
 
     /**
-     * Crée un objet NotificationApp et l'envoie à la nouvelle collection official_alerts dans Firestore.
-     * Cette action déclenchera la Cloud Function (Étape 3).
+     * Crée un objet NotificationApp et l'envoie.
      */
     private void sendAlertToFirebase(String title, String message) {
         if (getContext() == null) return;
@@ -291,18 +338,17 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         alert.setTitre(title);
         alert.setMessage(message);
         alert.setDate(new Date());
-        alert.setType("ALERTE_OFFICIELLE"); // Type spécial pour le client et le backend (si besoin)
+        alert.setType("ALERTE_OFFICIELLE");
 
         firestoreRepo.addOfficialAlert(alert, new FirestoreRepository.OnFirestoreTaskComplete() {
             @Override
             public void onSuccess() {
-                // Confirmation d'envoi et ajout à la collection "notifications" pour l'historique local de l'admin
                 Toast.makeText(getContext(), "Alerte envoyée à la population !", Toast.LENGTH_LONG).show();
                 firestoreRepo.addNotification(alert);
             }
             @Override
             public void onError(Exception e) {
-                Toast.makeText(getContext(), "Erreur lors de l'envoi de l'alerte : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Erreur lors de l'envoi : " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -313,7 +359,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     @Override
     public void onValidateClick(Incident incident) {
-        new AlertDialog.Builder(getContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Validation")
                 .setMessage("Confirmer la prise en charge de cet incident ?")
                 .setPositiveButton("Oui", (dialog, which) -> {
@@ -355,7 +401,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     @Override
     public void onDeleteClick(Incident incident) {
-        new AlertDialog.Builder(getContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Suppression")
                 .setMessage("Supprimer définitivement ce signalement ?")
                 .setPositiveButton("Supprimer", (dialog, which) -> {
@@ -381,6 +427,9 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         }
     }
 
+    /**
+     * Affiche des statistiques détaillées et formatées professionnellement.
+     */
     private void showStatisticsDialog() {
         if (allIncidents == null || allIncidents.isEmpty()) {
             Toast.makeText(getContext(), "Pas de données.", Toast.LENGTH_SHORT).show();
@@ -393,21 +442,32 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             if (cat.contains("accident")) nbAccidents++;
             else if (cat.contains("vol")) nbVols++;
             else if (cat.contains("incendie")) nbIncendies++;
-            else if (cat.contains("travaux") || cat.contains("panne")) nbTravaux++; // On regroupe Panne/Travaux pour stats
+            else if (cat.contains("travaux") || cat.contains("panne")) nbTravaux++;
 
             if ("Traité".equalsIgnoreCase(i.getStatut())) nbTraites++;
         }
 
-        String statsMsg = "📊 Rapport de la Ville :\n\n" +
-                "🚗 Accidents : " + nbAccidents + "\n" +
-                "🏃 Vols : " + nbVols + "\n" +
-                "🔥 Incendies : " + nbIncendies + "\n" +
-                "🔧 Pannes/Travaux : " + nbTravaux + "\n\n" +
-                "✅ Résolus : " + nbTraites + " / " + allIncidents.size();
+        // Calcul du pourcentage
+        int total = allIncidents.size();
+        int pourcentageReussite = (total > 0) ? (nbTraites * 100 / total) : 0;
 
-        new AlertDialog.Builder(getContext())
-                .setTitle("Statistiques Admin")
-                .setMessage(statsMsg)
+        // Construction du rapport professionnel
+        StringBuilder sb = new StringBuilder();
+        sb.append("📅 SITUATION GLOBALE\n");
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n");
+        sb.append("📌 Total Incidents : ").append(total).append("\n");
+        sb.append("✅ Taux de Résolution : ").append(pourcentageReussite).append("%\n\n");
+
+        sb.append("📂 RÉPARTITION PAR TYPE\n");
+        sb.append("━━━━━━━━━━━━━━━━━━━━\n");
+        sb.append("🚗  Accidents : ").append(nbAccidents).append("\n");
+        sb.append("🏃  Sécurité (Vols) : ").append(nbVols).append("\n");
+        sb.append("🔥  Incendies : ").append(nbIncendies).append("\n");
+        sb.append("🔧  Technique : ").append(nbTravaux).append("\n");
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("📊 Tableau de Bord")
+                .setMessage(sb.toString())
                 .setPositiveButton("Fermer", null)
                 .show();
     }
