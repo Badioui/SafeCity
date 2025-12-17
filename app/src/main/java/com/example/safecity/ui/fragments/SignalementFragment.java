@@ -24,10 +24,13 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.Fragment;
+
+// Remplacement de AlertDialog par MaterialAlertDialogBuilder
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
 
 import com.bumptech.glide.Glide;
 import com.example.safecity.R;
@@ -37,7 +40,6 @@ import com.example.safecity.utils.AppExecutors;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.utils.ImageUtils;
 import com.example.safecity.utils.LocationHelper;
-import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.storage.FirebaseStorage;
@@ -247,7 +249,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         }
     }
 
-    // --- MODIFICATION : GESTION ROBUSTE DE LA SUPPRESSION DU FICHIER ---
     private void uploadImageAndSave(Incident incident) {
         if (getContext() == null) return;
         Uri fileUri = Uri.fromFile(new File(finalPhotoPath));
@@ -259,8 +260,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
                         incident.setPhotoUrl(uri.toString());
                         saveToFirestore(incident);
-
-                        // Nettoyage en cas de succès
                         deleteTempFile(finalPhotoPath);
                     });
                 })
@@ -268,14 +267,11 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     if (isAdded()) {
                         btnSubmit.setEnabled(true);
                         Toast.makeText(getContext(), "Erreur upload image", Toast.LENGTH_SHORT).show();
-
-                        // Nettoyage en cas d'échec aussi !
                         deleteTempFile(finalPhotoPath);
                     }
                 });
     }
 
-    // --- NOUVELLE MÉTHODE UTILITAIRE ---
     private void deleteTempFile(String path) {
         if (path == null) return;
         try {
@@ -397,14 +393,17 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (getContext() != null && !cbNoGps.isChecked()) tvGpsLocation.setText("⚠️ " + message);
     }
 
+    // CORRECTION : Utilisation de MaterialAlertDialogBuilder avec bouton Annuler
     private void showImageSourceDialog() {
         String[] options = {"Prendre une photo", "Choisir dans la galerie"};
-        new AlertDialog.Builder(requireContext())
+        new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Ajouter une photo")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) checkCameraPermission();
                     else checkGalleryPermission();
-                }).show();
+                })
+                .setNegativeButton("Annuler", null) // Ajout du bouton pour fermer
+                .show();
     }
 
     private void checkCameraPermission() {

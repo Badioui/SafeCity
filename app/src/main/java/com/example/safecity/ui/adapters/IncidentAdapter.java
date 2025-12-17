@@ -36,7 +36,8 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         void onMapClick(Incident incident);
         void onEditClick(Incident incident);
         void onDeleteClick(Incident incident);
-        void onValidateClick(Incident incident); // NOUVEAU : Action de validation
+        void onValidateClick(Incident incident);
+        void onImageClick(Incident incident); // NOUVEAU : Clic sur l'image
     }
 
     public IncidentAdapter(Context context, List<Incident> incidentList, OnIncidentActionListener listener) {
@@ -99,8 +100,18 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
                     .transform(new CenterCrop(), new RoundedCorners(16))
                     .placeholder(R.drawable.ic_incident_placeholder)
                     .into(holder.imgPhoto);
+
+            // NOUVEAU : Clic sur l'image pour l'ouvrir en grand
+            holder.imgPhoto.setOnClickListener(v -> {
+                if (actionListener != null) {
+                    actionListener.onImageClick(incident);
+                }
+            });
+
         } else {
             holder.imgPhoto.setImageResource(R.drawable.ic_incident_placeholder);
+            // Pas de clic si pas d'image (ou alors pour en ajouter une, mais hors scope ici)
+            holder.imgPhoto.setOnClickListener(null);
         }
 
         // --- 2. LOGIQUE DES BOUTONS SELON LES RÔLES ---
@@ -163,7 +174,7 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
     public static class IncidentViewHolder extends RecyclerView.ViewHolder {
         TextView tvDescription, tvCategory, tvStatus, tvUsername;
         ImageView imgPhoto;
-        ImageButton btnMap, btnEdit, btnDelete, btnValidate; // Ajout btnValidate
+        ImageButton btnMap, btnEdit, btnDelete, btnValidate;
 
         public IncidentViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -177,7 +188,7 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
             btnMap = itemView.findViewById(R.id.btn_open_map);
             btnEdit = itemView.findViewById(R.id.btn_edit_incident);
             btnDelete = itemView.findViewById(R.id.btn_delete_incident);
-            btnValidate = itemView.findViewById(R.id.btn_validate_incident); // Liaison
+            btnValidate = itemView.findViewById(R.id.btn_validate_incident);
         }
     }
 }

@@ -1,9 +1,13 @@
 package com.example.safecity.ui.fragments;
 
+import android.app.Dialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button; // Import nécessaire pour le bouton du Dialog
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.EditText;
@@ -13,12 +17,12 @@ import android.widget.RadioButton;
 import android.graphics.Color;
 import android.graphics.Typeface;
 
-// REMOVED: import android.app.AlertDialog;
-// ADDED: Material Design Dialog
+import com.bumptech.glide.Glide;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog; // Import pour le type de dialogue retourné par le Builder
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -229,7 +233,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     }
 
     // ==================================================================
-    // NOUVELLES MÉTHODES D'ALERTE OFFICIELLE (Étape 2) - AMÉLIORÉES
+    // NOUVELLES MÉTHODES D'ALERTE OFFICIELLE - ROBUSTE
     // ==================================================================
 
     /**
@@ -250,6 +254,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     /**
      * Affiche une boîte de dialogue PROFESSIONNELLE pour envoyer une alerte.
+     * Version CORRIGÉE : Ne ferme pas le popup si les champs sont vides.
      */
     private void showSendAlertDialog() {
         if (getContext() == null) return;
@@ -307,25 +312,35 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         etMessage.setLines(3);
         layout.addView(etMessage);
 
-        // UPDATED: Using MaterialAlertDialogBuilder avec formulaire complet
-        new MaterialAlertDialogBuilder(requireContext())
+        // 1. Création du Dialog SANS l'afficher tout de suite
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setView(layout)
                 .setTitle("📢 Diffuser une Alerte")
-                .setPositiveButton("ENVOYER", (dialog, which) -> {
-                    String titleInput = etTitle.getText().toString().trim();
-                    String body = etMessage.getText().toString().trim();
-                    boolean isUrgent = rbUrgent.isChecked();
-
-                    if (!titleInput.isEmpty() && !body.isEmpty()) {
-                        // Ajout automatique du préfixe si Urgent
-                        String finalTitle = isUrgent ? "🚨 [URGENT] " + titleInput : "ℹ️ " + titleInput;
-                        sendAlertToFirebase(finalTitle, body);
-                    } else {
-                        Toast.makeText(getContext(), "Le titre et le message sont requis.", Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .setPositiveButton("ENVOYER", null) // IMPORTANT : On met null pour override le listener ensuite
                 .setNegativeButton("Annuler", null)
-                .show();
+                .create();
+
+        // 2. On configure le comportement du bouton APRES l'affichage (onShow)
+        dialog.setOnShowListener(dialogInterface -> {
+            Button button = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            button.setOnClickListener(view -> {
+                String titleInput = etTitle.getText().toString().trim();
+                String body = etMessage.getText().toString().trim();
+                boolean isUrgent = rbUrgent.isChecked();
+
+                if (!titleInput.isEmpty() && !body.isEmpty()) {
+                    // C'est valide, on envoie et on ferme
+                    String finalTitle = isUrgent ? "🚨 [URGENT] " + titleInput : "ℹ️ " + titleInput;
+                    sendAlertToFirebase(finalTitle, body);
+                    dialog.dismiss();
+                } else {
+                    // Erreur : on affiche le Toast MAIS on ne ferme pas le dialog
+                    Toast.makeText(getContext(), "Le titre et le message sont requis.", Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        dialog.show();
     }
 
     /**
@@ -354,7 +369,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     }
 
     // ==================================================================
-    // ACTIONS ADAPTER
+    // ACTIONS ADAPTER (Implementation Interface)
     // ==================================================================
 
     @Override
@@ -425,6 +440,36 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).navigateToMapAndFocus(incident.getLatitude(), incident.getLongitude());
         }
+    }
+
+    // --- NOUVEAU : Clic sur l'image pour Zoom ---
+    @Override
+    public void onImageClick(Incident incident) {
+        if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty()) {
+            showFullImageDialog(incident.getPhotoUrl());
+        }
+    }
+
+    // --- Méthode Helper pour afficher le Dialog Plein Écran ---
+    private void showFullImageDialog(String imageUrl) {
+        if (getContext() == null) return;
+
+        // Utilisation d'un Dialog standard avec un thème plein écran
+        Dialog dialog = new Dialog(getContext(), android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        dialog.setContentView(R.layout.dialog_fullscreen_image);
+
+        ImageView fullImageView = dialog.findViewById(R.id.img_full_screen);
+        ImageButton btnClose = dialog.findViewById(R.id.btn_close_dialog);
+
+        // Charger l'image avec Glide (fitCenter pour voir l'image entière)
+        Glide.with(this)
+                .load(imageUrl)
+                .fitCenter()
+                .placeholder(R.drawable.ic_incident_placeholder) // Assurez-vous d'avoir ce drawable ou retirez la ligne
+                .into(fullImageView);
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
     }
 
     /**

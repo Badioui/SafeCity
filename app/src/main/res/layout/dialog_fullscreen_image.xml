@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- L'image en plein écran -->
+    <ImageView
+        android:id="@+id/img_full_screen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="Image plein écran"
+        android:scaleType="fitCenter" />
+
+    <!-- Le bouton de fermeture (croix) -->
+    <ImageButton
+        android:id="@+id/btn_close_dialog"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentTop="true"
+        android:layout_margin="16dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:tint="@android:color/white"
+        android:contentDescription="Fermer" />
+
+</RelativeLayout>
