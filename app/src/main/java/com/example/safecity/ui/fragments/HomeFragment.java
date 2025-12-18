@@ -1,6 +1,8 @@
 package com.example.safecity.ui.fragments;
 
 import android.app.Dialog;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -15,15 +17,14 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.graphics.Color;
-import android.graphics.Typeface;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.widget.SearchView; // Import CRUCIAL pour la compatibilité
+import androidx.appcompat.widget.SearchView;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -131,10 +132,10 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         }
 
         // --- LISTENER CHIPS ---
-        chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery)); // Utilise la query actuelle
+        chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery));
     }
 
-    // --- MISE À JOUR MENU DE RECHERCHE (TASK 3) ---
+    // --- CORRECTION 1 : CONFIGURATION SEARCHVIEW ---
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_home, menu);
@@ -144,27 +145,36 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             SearchView searchView = (SearchView) searchItem.getActionView();
 
             if (searchView != null) {
-                // CORRECTION VISIBILITÉ
-                searchView.setSubmitButtonEnabled(true); // Affiche la flèche ">"
-                searchView.setQueryHint("Rechercher...");
+                // 1. Force l'affichage du bouton "Go" (soumettre)
+                searchView.setSubmitButtonEnabled(true);
+                // 2. Garde la barre ouverte (plus accessible)
+                searchView.setIconifiedByDefault(false);
+                // 3. Texte d'aide clair
+                searchView.setQueryHint("Rechercher un incident...");
+
+                // 4. Astuce pour s'assurer que l'icône "Go" est visible (couleur)
+                ImageView searchGoBtn = searchView.findViewById(androidx.appcompat.R.id.search_go_btn);
+                if (searchGoBtn != null) {
+                    searchGoBtn.setColorFilter(Color.BLACK); // Ou R.color.design_default_color_primary
+                }
 
                 searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
                     @Override
                     public boolean onQueryTextSubmit(String query) {
-                        searchQuery = query; // Sauvegarde la query
+                        searchQuery = query;
                         applyFilters(query);
+                        searchView.clearFocus(); // Ferme le clavier après validation
                         return true;
                     }
 
                     @Override
                     public boolean onQueryTextChange(String newText) {
                         searchQuery = newText;
-                        applyFilters(newText); // Filtrage en temps réel
+                        applyFilters(newText);
                         return true;
                     }
                 });
 
-                // Gérer la fermeture de la recherche
                 searchView.setOnCloseListener(() -> {
                     searchQuery = null;
                     applyFilters(null);
@@ -197,7 +207,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             public void onIncidentsLoaded(List<Incident> incidents) {
                 if (!isAdded() || getActivity() == null) return;
                 allIncidents = incidents != null ? incidents : new ArrayList<>();
-                applyFilters(searchQuery); // Réapplique les filtres actuels
+                applyFilters(searchQuery);
             }
 
             @Override
@@ -207,7 +217,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         });
     }
 
-    // --- LOGIQUE DE FILTRAGE ---
     private void applyFilters(String queryText) {
         List<Incident> filteredList = new ArrayList<>();
         String queryLower = (queryText != null) ? queryText.toLowerCase() : null;
@@ -256,7 +265,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         }
     }
 
-    // --- ADMIN MENU ---
     private void showAdminMenu() {
         if (getContext() == null) return;
         String[] options = {"📊 Voir Tableau de Bord", "📢 Diffuser Alerte Officielle"};
@@ -269,12 +277,19 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                 .show();
     }
 
-    // --- ENVOI ALERTE ---
+    // --- CORRECTION 2 : LAYOUT ALERTE OFFICIELLE (SCROLLVIEW) ---
     private void showSendAlertDialog() {
         if (getContext() == null) return;
+
+        // Container scrollable pour éviter que les boutons sortent de l'écran
+        ScrollView scrollView = new ScrollView(getContext());
+        scrollView.setFillViewport(true);
+
         LinearLayout layout = new LinearLayout(getContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(60, 40, 60, 10);
+        // Marges plus confortables
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        layout.setPadding(padding, padding/2, padding, padding);
 
         TextView tvPriority = new TextView(getContext());
         tvPriority.setText("Niveau d'urgence");
@@ -302,15 +317,18 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         TextView tvMessage = new TextView(getContext());
         tvMessage.setText("Message");
+        tvMessage.setPadding(0, 20, 0, 0);
         layout.addView(tvMessage);
         final EditText etMessage = new EditText(getContext());
         etMessage.setLines(3);
         layout.addView(etMessage);
 
+        scrollView.addView(layout);
+
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                .setView(layout)
+                .setView(scrollView) // On passe le ScrollView au dialog
                 .setTitle("📢 Diffuser une Alerte")
-                .setPositiveButton("ENVOYER", null)
+                .setPositiveButton("ENVOYER", null) // Le listener est défini après pour éviter la fermeture auto
                 .setNegativeButton("Annuler", null)
                 .create();
 
@@ -347,7 +365,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         });
     }
 
-    // --- ACTIONS INCIDENT ---
     @Override
     public void onValidateClick(Incident incident) {
         new MaterialAlertDialogBuilder(requireContext())

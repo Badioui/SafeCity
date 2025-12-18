@@ -16,6 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+        <!-- Header: Profil et Date -->
         <ImageView
             android:id="@+id/img_profile"
             android:layout_width="40dp"
@@ -64,6 +65,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Contenu: Description et Photo -->
         <TextView
             android:id="@+id/tv_description"
             android:layout_width="0dp"
@@ -100,71 +102,105 @@
             android:background="#EEEEEE"
             app:layout_constraintTop_toBottomOf="@id/img_incident_photo" />
 
+        <!-- Barre d'actions réorganisée -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:paddingTop="8dp"
+            android:gravity="center_vertical"
             app:layout_constraintTop_toBottomOf="@id/divider_actions"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
+            <!-- 1. LIKE -->
+            <ImageButton
+                android:id="@+id/btn_like"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@drawable/ic_heart"
+                app:tint="@android:color/darker_gray"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="J'aime" />
+            <TextView
+                android:id="@+id/tv_likes_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="12sp"
+                android:textColor="@android:color/darker_gray"
+                android:layout_marginEnd="12dp"/>
+
+            <!-- 2. COMMENTAIRE (Nouveau) -->
+            <ImageButton
+                android:id="@+id/btn_comment"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/stat_notify_chat"
+                app:tint="@android:color/darker_gray"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Commenter" />
+            <TextView
+                android:id="@+id/tv_comments_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="12sp"
+                android:textColor="@android:color/darker_gray"
+                android:layout_marginEnd="12dp"/>
+
+            <!-- 3. CARTE -->
             <ImageButton
                 android:id="@+id/btn_open_map"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:src="@drawable/ic_map"
                 app:tint="@android:color/holo_blue_dark"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Carte" />
-
+                android:contentDescription="Voir sur la carte" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Carte"
                 android:textSize="12sp"
-                android:layout_gravity="center_vertical"
-                android:textColor="@android:color/darker_gray"/>
+                android:textColor="@android:color/darker_gray" />
 
+            <!-- Spacer pour pousser les boutons admin à droite -->
             <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
 
-            <ImageButton
-                android:id="@+id/btn_like"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/ic_heart"
-                app:tint="@android:color/darker_gray"
-                android:background="?attr/selectableItemBackgroundBorderless" />
-
+            <!-- Boutons Admin/Auteur -->
             <ImageButton
                 android:id="@+id/btn_edit_incident"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:src="@drawable/ic_edit"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 app:tint="@android:color/darker_gray"
                 android:visibility="gone"
-                tools:visibility="visible" />
+                tools:visibility="visible"
+                android:contentDescription="Modifier" />
 
             <ImageButton
                 android:id="@+id/btn_delete_incident"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:src="@drawable/ic_delete"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 app:tint="@android:color/holo_red_dark"
                 android:visibility="gone"
-                tools:visibility="visible" />
+                tools:visibility="visible"
+                android:contentDescription="Supprimer" />
 
             <ImageButton
                 android:id="@+id/btn_validate_incident"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:src="@drawable/ic_check"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 app:tint="@android:color/holo_green_dark"
                 android:visibility="gone"
-                tools:visibility="visible" />
+                tools:visibility="visible"
+                android:contentDescription="Valider" />
 
         </LinearLayout>
 

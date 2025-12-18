@@ -31,6 +31,7 @@ public class Incident implements ClusterItem {
     private String auteurPhotoUrl; // Avatar de l'auteur
     private int likesCount;        // Nombre de J'aime
     private List<String> likedBy;  // Liste des ID utilisateurs qui ont liké
+    private int commentsCount;     // AJOUT : Nombre de commentaires
 
     // --- Champs dénormalisés (Pour l'affichage rapide) ---
     private String nomCategorie;
@@ -41,6 +42,7 @@ public class Incident implements ClusterItem {
         // Valeurs par défaut
         this.statut = STATUT_NOUVEAU;
         this.likesCount = 0;
+        this.commentsCount = 0; // Init
         this.likedBy = new ArrayList<>();
     }
 
@@ -57,8 +59,9 @@ public class Incident implements ClusterItem {
         this.dateSignalement = dateSignalement;
         this.statut = statut;
         this.idUtilisateur = idUtilisateur;
-        // Init likes
+        // Init compteurs
         this.likesCount = 0;
+        this.commentsCount = 0;
         this.likedBy = new ArrayList<>();
     }
 
@@ -113,6 +116,9 @@ public class Incident implements ClusterItem {
 
     public int getLikesCount() { return likesCount; }
     public void setLikesCount(int likesCount) { this.likesCount = likesCount; }
+
+    public int getCommentsCount() { return commentsCount; } // Getter Commentaire
+    public void setCommentsCount(int commentsCount) { this.commentsCount = commentsCount; } // Setter Commentaire
 
     public List<String> getLikedBy() { return likedBy; }
     public void setLikedBy(List<String> likedBy) { this.likedBy = likedBy; }
