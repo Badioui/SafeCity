@@ -17,6 +17,9 @@ public class Utilisateur {
     private String idRole; // FK vers la collection roles
     private String dateCreation;
 
+    // NOUVEAU : URL de la photo de profil (Avatar)
+    private String photoProfilUrl;
+
     // NOUVEAU CHAMP : Score de gamification
     private int score;
 
@@ -34,6 +37,13 @@ public class Utilisateur {
         this.idRole = idRole;
         this.dateCreation = dateCreation;
         this.score = 0; // Initialisation par défaut
+    }
+
+    // Constructeur complet avec Photo
+    public Utilisateur(String id, String nom, String email,
+                       String motDePasseHash, String idRole, String dateCreation, String photoProfilUrl) {
+        this(id, nom, email, motDePasseHash, idRole, dateCreation);
+        this.photoProfilUrl = photoProfilUrl;
     }
 
     // --- Getters / Setters ---
@@ -83,6 +93,15 @@ public class Utilisateur {
 
     public void setDateCreation(String dateCreation) {
         this.dateCreation = dateCreation;
+    }
+
+    // NOUVEAU : Getter/Setter Photo de Profil
+    public String getPhotoProfilUrl() {
+        return photoProfilUrl;
+    }
+
+    public void setPhotoProfilUrl(String photoProfilUrl) {
+        this.photoProfilUrl = photoProfilUrl;
     }
 
     // --- GESTION DU SCORE (GAMIFICATION) ---

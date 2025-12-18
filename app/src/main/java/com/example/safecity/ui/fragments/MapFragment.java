@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -13,6 +15,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 import com.example.safecity.utils.FirestoreRepository;
@@ -21,6 +24,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.chip.ChipGroup;
 import com.google.maps.android.clustering.ClusterManager;
 
@@ -66,7 +70,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
 
         chipGroup = view.findViewById(R.id.chip_group_filters);
 
-        // --- MISE À JOUR DU LISTENER DES CHIPS ---
+        // --- LISTENER DES CHIPS (FILTRES) ---
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.chip_all) {
                 updateMapMarkers(allIncidents);
@@ -76,12 +80,11 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
                 filterMarkers("Vol");
             } else if (checkedId == R.id.chip_incendie) {
                 filterMarkers("Incendie");
-            } else if (checkedId == R.id.chip_panne) { // NOUVEAU
+            } else if (checkedId == R.id.chip_panne) {
                 filterMarkers("Panne");
-            } else if (checkedId == R.id.chip_autre) { // NOUVEAU
+            } else if (checkedId == R.id.chip_autre) {
                 filterMarkers("Autre");
             }
-            // "Travaux" a été retiré car absent de Firebase
         });
     }
 
@@ -90,7 +93,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         this.googleMap = map;
 
         // Padding pour éviter que les Chips ne cachent le bouton "Ma Position"
-        // 180px est suffisant pour le HorizontalScrollView + Chips
         int topPadding = 180;
         this.googleMap.setPadding(0, topPadding, 0, 0);
 
@@ -104,12 +106,63 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
 
         this.googleMap.getUiSettings().setZoomControlsEnabled(true);
 
+        // --- CONFIGURATION DU CLUSTER MANAGER ---
         clusterManager = new ClusterManager<>(getContext(), googleMap);
         googleMap.setOnCameraIdleListener(clusterManager);
+
+        // Déléguer le clic sur le marqueur au ClusterManager
         googleMap.setOnMarkerClickListener(clusterManager);
+
+        // Gérer le clic sur un Item (Incident) du cluster
+        clusterManager.setOnClusterItemClickListener(incident -> {
+            showIncidentBottomSheet(incident);
+            return true; // Indique que l'événement est consommé
+        });
 
         enableUserLocation();
         loadIncidentMarkers();
+    }
+
+    // --- AFFICHER LE BOTTOM SHEET (DÉTAILS INCIDENT) ---
+    private void showIncidentBottomSheet(Incident incident) {
+        if (getContext() == null) return;
+
+        BottomSheetDialog bottomSheetDialog = new BottomSheetDialog(getContext());
+        View sheetView = LayoutInflater.from(getContext()).inflate(R.layout.layout_map_bottom_sheet, null);
+        bottomSheetDialog.setContentView(sheetView);
+
+        // Binding des vues du BottomSheet
+        ImageView imgProfile = sheetView.findViewById(R.id.sheet_img_profile);
+        TextView tvUsername = sheetView.findViewById(R.id.sheet_tv_username);
+        TextView tvCategory = sheetView.findViewById(R.id.sheet_tv_category);
+        TextView tvDescription = sheetView.findViewById(R.id.sheet_tv_description);
+        ImageView imgIncident = sheetView.findViewById(R.id.sheet_img_incident);
+        TextView tvLikes = sheetView.findViewById(R.id.sheet_tv_likes);
+
+        // Remplissage des données
+        tvUsername.setText(incident.getNomUtilisateur());
+        tvCategory.setText(incident.getNomCategorie());
+        tvDescription.setText(incident.getDescription());
+        tvLikes.setText(incident.getLikesCount() + " J'aime");
+
+        // Avatar utilisateur
+        if (incident.getAuteurPhotoUrl() != null && !incident.getAuteurPhotoUrl().isEmpty()) {
+            Glide.with(this).load(incident.getAuteurPhotoUrl()).circleCrop().into(imgProfile);
+        } else {
+            imgProfile.setImageResource(R.drawable.ic_profile);
+        }
+
+        // Photo Incident (Gestion adaptative)
+        // Note: Assurez-vous que la méthode hasMedia() existe dans votre modèle Incident,
+        // sinon remplacez par : if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty())
+        if (incident.hasMedia()) {
+            imgIncident.setVisibility(View.VISIBLE);
+            Glide.with(this).load(incident.getPhotoUrl()).into(imgIncident);
+        } else {
+            imgIncident.setVisibility(View.GONE);
+        }
+
+        bottomSheetDialog.show();
     }
 
     private void loadIncidentMarkers() {
@@ -119,13 +172,13 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
                 if (!isAdded()) return;
                 allIncidents = incidents;
 
-                // --- MISE À JOUR DE LA LOGIQUE DE RE-FILTRAGE ---
+                // Réappliquer le filtre courant si nécessaire
                 int checkedId = chipGroup.getCheckedChipId();
                 if (checkedId == R.id.chip_accident) filterMarkers("Accident");
                 else if (checkedId == R.id.chip_vol) filterMarkers("Vol");
                 else if (checkedId == R.id.chip_incendie) filterMarkers("Incendie");
-                else if (checkedId == R.id.chip_panne) filterMarkers("Panne"); // NOUVEAU
-                else if (checkedId == R.id.chip_autre) filterMarkers("Autre"); // NOUVEAU
+                else if (checkedId == R.id.chip_panne) filterMarkers("Panne");
+                else if (checkedId == R.id.chip_autre) filterMarkers("Autre");
                 else updateMapMarkers(allIncidents);
             }
 
@@ -142,7 +195,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         List<Incident> filteredList = new ArrayList<>();
         if (allIncidents != null) {
             for (Incident inc : allIncidents) {
-                // Le toLowerCase permet de gérer "Panne", "panne", "PANNE" sans souci
                 if (inc.getNomCategorie() != null &&
                         inc.getNomCategorie().toLowerCase().contains(categoryName.toLowerCase())) {
                     filteredList.add(inc);
@@ -158,6 +210,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         clusterManager.clearItems();
 
         for (Incident inc : incidentsToDisplay) {
+            // Filtrage basique des coordonnées invalides (0,0)
             if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
                 continue;
             }

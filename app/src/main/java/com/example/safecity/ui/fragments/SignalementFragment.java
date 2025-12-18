@@ -28,7 +28,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.Fragment;
 
-// Remplacement de AlertDialog par MaterialAlertDialogBuilder
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 
@@ -36,6 +35,7 @@ import com.bumptech.glide.Glide;
 import com.example.safecity.R;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
+import com.example.safecity.model.Utilisateur; // Import nécessaire
 import com.example.safecity.utils.AppExecutors;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.utils.ImageUtils;
@@ -57,13 +57,14 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
     private static final String ARG_INCIDENT_ID = "arg_incident_id";
 
-    // Constantes
+    // Constantes permissions
     private static final int REQUEST_IMAGE_CAPTURE = 1;
     private static final int REQUEST_GALLERY_PICK = 2;
     private static final int PERM_CODE_CAMERA = 100;
     private static final int PERM_CODE_LOCATION = 101;
     private static final int PERM_CODE_GALLERY = 102;
 
+    // UI
     private TextInputEditText etDescription;
     private Spinner spinnerType;
     private Button btnSubmit;
@@ -72,15 +73,19 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     private TextView tvGpsLocation, tvHeader;
     private CheckBox cbNoGps;
 
+    // Logic
     private FirestoreRepository firestoreRepo;
     private LocationHelper locationHelper;
     private Location lastKnownLocation;
     private String currentPhotoPath;
     private String finalPhotoPath;
 
-    // Variables pour le mode ÉDITION
+    // Data
     private String editingIncidentId = null;
     private Incident incidentToEdit;
+
+    // NOUVEAU : Utilisateur chargé pour récupérer l'avatar
+    private Utilisateur mCurrentUser;
 
     public static SignalementFragment newInstance(String incidentId) {
         SignalementFragment fragment = new SignalementFragment();
@@ -115,6 +120,21 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             editingIncidentId = getArguments().getString(ARG_INCIDENT_ID, null);
         }
 
+        // --- 1. CHARGEMENT UTILISATEUR (Pour l'avatar) ---
+        FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (fbUser != null) {
+            firestoreRepo.getUser(fbUser.getUid(), new FirestoreRepository.OnUserLoadedListener() {
+                @Override
+                public void onUserLoaded(Utilisateur utilisateur) {
+                    mCurrentUser = utilisateur;
+                }
+                @Override
+                public void onError(Exception e) {
+                    // En cas d'erreur, mCurrentUser restera null (pas grave, on a des fallbacks)
+                }
+            });
+        }
+
         loadCategoriesAndInit();
 
         btnCapturePhoto.setOnClickListener(v -> showImageSourceDialog());
@@ -131,8 +151,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         });
     }
 
-    // --- 1. CHARGEMENT ET INIT ---
-
     private void loadCategoriesAndInit() {
         firestoreRepo.getCategories(new FirestoreRepository.OnCategoriesLoadedListener() {
             @Override
@@ -144,8 +162,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                             android.R.layout.simple_spinner_item, cats);
                     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
                     spinnerType.setAdapter(adapter);
-                } else {
-                    Toast.makeText(getContext(), "Aucune catégorie trouvée", Toast.LENGTH_SHORT).show();
                 }
 
                 if (editingIncidentId != null) {
@@ -161,14 +177,11 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         });
     }
 
-    // --- 2. CHARGEMENT DES DONNÉES (MODE ÉDITION) ---
-
     private void loadIncidentData(String id) {
         firestoreRepo.getIncident(id, new FirestoreRepository.OnIncidentLoadedListener() {
             @Override
             public void onIncidentLoaded(Incident incident) {
                 if (!isAdded()) return;
-
                 incidentToEdit = incident;
                 etDescription.setText(incident.getDescription());
 
@@ -189,7 +202,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
                 cbNoGps.setChecked(true);
                 tvGpsLocation.setText("Position originale conservée");
-
                 lastKnownLocation = new Location("Firestore");
                 lastKnownLocation.setLatitude(incident.getLatitude());
                 lastKnownLocation.setLongitude(incident.getLongitude());
@@ -201,8 +213,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             }
         });
     }
-
-    // --- 3. SAUVEGARDE ---
 
     private void prepareAndSaveIncident() {
         String desc = etDescription.getText().toString().trim();
@@ -223,17 +233,33 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         }
 
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
-        if (currentUser != null) {
-            if (editingIncidentId == null) {
-                incident.setIdUtilisateur(currentUser.getUid());
-                incident.setNomUtilisateur(currentUser.getDisplayName() != null ? currentUser.getDisplayName() : "Anonyme");
-            }
-        } else {
+        if (currentUser == null) {
             Toast.makeText(getContext(), "Connectez-vous", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (editingIncidentId == null) {
+        // --- GESTION AUTEUR & AVATAR (NOUVEAU) ---
+        if (editingIncidentId == null) { // Seulement à la création
+            incident.setIdUtilisateur(currentUser.getUid());
+
+            // 1. Gestion du nom (Firestore > Auth > Anonyme)
+            String userName = "Anonyme";
+            if (mCurrentUser != null && mCurrentUser.getNom() != null && !mCurrentUser.getNom().isEmpty()) {
+                userName = mCurrentUser.getNom();
+            } else if (currentUser.getDisplayName() != null) {
+                userName = currentUser.getDisplayName();
+            }
+            incident.setNomUtilisateur(userName);
+
+            // 2. Gestion de l'avatar (Firestore > Auth > null)
+            String userPhotoUrl = null;
+            if (mCurrentUser != null && mCurrentUser.getPhotoProfilUrl() != null) {
+                userPhotoUrl = mCurrentUser.getPhotoProfilUrl();
+            } else if (currentUser.getPhotoUrl() != null) {
+                userPhotoUrl = currentUser.getPhotoUrl().toString();
+            }
+            incident.setAuteurPhotoUrl(userPhotoUrl); // Sauvegarde de l'avatar
+
             incident.setStatut(Incident.STATUT_NOUVEAU);
             incident.setDateSignalement(new Date());
         }
@@ -244,7 +270,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (finalPhotoPath != null) {
             uploadImageAndSave(incident);
         } else {
-            if (editingIncidentId == null) incident.setPhotoUrl("");
+            if (editingIncidentId == null && incident.getPhotoUrl() == null) incident.setPhotoUrl("");
             saveToFirestore(incident);
         }
     }
@@ -276,12 +302,8 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (path == null) return;
         try {
             File file = new File(path);
-            if (file.exists()) {
-                file.delete();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+            if (file.exists()) file.delete();
+        } catch (Exception e) {}
     }
 
     private void saveToFirestore(Incident incident) {
@@ -309,7 +331,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     if (isAdded()) {
                         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                         if (user != null) firestoreRepo.incrementUserScore(user.getUid(), 10);
-
                         Toast.makeText(getContext(), "Envoyé ! (+10 pts)", Toast.LENGTH_SHORT).show();
                         getParentFragmentManager().popBackStack();
                     }
@@ -325,22 +346,18 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         }
     }
 
-    // --- LOGIQUE PHOTO ---
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == Activity.RESULT_OK) {
-            Toast.makeText(getContext(), "Traitement de l'image...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Traitement...", Toast.LENGTH_SHORT).show();
             AppExecutors.getInstance().diskIO().execute(() -> {
                 try {
                     File processedFile = null;
                     if (requestCode == REQUEST_IMAGE_CAPTURE) {
                         File rawFile = new File(currentPhotoPath);
                         processedFile = ImageUtils.compressImage(rawFile);
-                        if (rawFile.exists()) {
-                            rawFile.delete();
-                        }
+                        if (rawFile.exists()) rawFile.delete();
                     } else if (requestCode == REQUEST_GALLERY_PICK && data != null) {
                         Uri selectedImageUri = data.getData();
                         processedFile = ImageUtils.compressUri(getContext(), selectedImageUri);
@@ -354,14 +371,10 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                             }
                         });
                     }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                } catch (IOException e) { e.printStackTrace(); }
             });
         }
     }
-
-    // --- GPS & Permissions ---
 
     private void checkLocationPermissionAndStart() {
         if (cbNoGps.isChecked()) return;
@@ -393,7 +406,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
         if (getContext() != null && !cbNoGps.isChecked()) tvGpsLocation.setText("⚠️ " + message);
     }
 
-    // CORRECTION : Utilisation de MaterialAlertDialogBuilder avec bouton Annuler
     private void showImageSourceDialog() {
         String[] options = {"Prendre une photo", "Choisir dans la galerie"};
         new MaterialAlertDialogBuilder(requireContext())
@@ -402,7 +414,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     if (which == 0) checkCameraPermission();
                     else checkGalleryPermission();
                 })
-                .setNegativeButton("Annuler", null) // Ajout du bouton pour fermer
+                .setNegativeButton("Annuler", null)
                 .show();
     }
 
