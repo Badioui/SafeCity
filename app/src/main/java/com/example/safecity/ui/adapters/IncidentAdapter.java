@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.signature.ObjectKey;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 import com.google.firebase.firestore.FieldValue;
@@ -22,15 +24,18 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.List;
 
+/**
+ * Adaptateur Premium pour le flux de signalements.
+ * Synchronisé avec item_signalement.xml et gère les droits admin/auteur.
+ */
 public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.IncidentViewHolder> {
 
-    private Context context;
+    private final Context context;
     private List<Incident> incidentList;
-    private OnIncidentActionListener actionListener;
+    private final OnIncidentActionListener actionListener;
 
-    // Champs pour la gestion des droits
     private String currentUserId;
-    private String currentUserRole; // "admin", "autorite", "citoyen"
+    private String currentUserRole;
 
     public interface OnIncidentActionListener {
         void onMapClick(Incident incident);
@@ -38,7 +43,7 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         void onDeleteClick(Incident incident);
         void onValidateClick(Incident incident);
         void onImageClick(Incident incident);
-        void onCommentClick(Incident incident); // AJOUT : Clic sur commentaire
+        void onCommentClick(Incident incident);
     }
 
     public IncidentAdapter(Context context, List<Incident> incidentList, OnIncidentActionListener listener) {
@@ -47,11 +52,6 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         this.actionListener = listener;
     }
 
-    public IncidentAdapter(Context context, List<Incident> incidentList) {
-        this(context, incidentList, null);
-    }
-
-    // Méthode pour définir l'utilisateur actuel et ses droits
     public void setCurrentUser(String userId, String role) {
         this.currentUserId = userId;
         this.currentUserRole = role;
@@ -69,41 +69,42 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
     public void onBindViewHolder(@NonNull IncidentViewHolder holder, int position) {
         Incident incident = incidentList.get(position);
 
-        // --- 1. INFO UTILISATEUR & AVATAR ---
-        String userName = incident.getNomUtilisateur();
-        holder.tvUsername.setText((userName != null && !userName.isEmpty()) ? userName : "Citoyen");
+        // --- 1. IDENTITÉ AUTEUR ---
+        holder.tvUsername.setText(incident.getNomUtilisateur() != null ? incident.getNomUtilisateur() : "Citoyen");
 
-        if (incident.getAuteurPhotoUrl() != null && !incident.getAuteurPhotoUrl().isEmpty()) {
-            Glide.with(context)
-                    .load(incident.getAuteurPhotoUrl())
-                    .circleCrop()
-                    .placeholder(R.drawable.ic_profile)
-                    .into(holder.imgProfile);
-        } else {
-            holder.imgProfile.setImageResource(R.drawable.ic_profile);
-        }
+        // Cache intelligent pour l'avatar (évite de charger d'anciennes photos)
+        Glide.with(context)
+                .load(incident.getAuteurPhotoUrl())
+                .placeholder(R.drawable.ic_profile)
+                .circleCrop()
+                .signature(new ObjectKey(incident.getAuteurPhotoUrl() != null ? incident.getAuteurPhotoUrl() : "default"))
+                .into(holder.imgProfile);
 
-        // --- 2. TEMPS RELATIF ---
-        String timeAgo = "Date inconnue";
-        if (incident.getDateSignalement() != null) {
-            long now = System.currentTimeMillis();
-            long time = incident.getDateSignalement().getTime();
-            timeAgo = DateUtils.getRelativeTimeSpanString(time, now, DateUtils.MINUTE_IN_MILLIS).toString();
-        }
+        // --- 2. CATEGORIE & TEMPS ---
+        String timeAgo = incident.getDateSignalement() != null ?
+                DateUtils.getRelativeTimeSpanString(incident.getDateSignalement().getTime(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+                : "Récemment";
 
-        String categorie = (incident.getNomCategorie() != null) ? incident.getNomCategorie() : "Incident";
-        holder.tvCategoryDate.setText(categorie + " • " + timeAgo);
+        holder.tvCategoryDate.setText((incident.getNomCategorie() != null ? incident.getNomCategorie() : "Incident") + " • " + timeAgo);
 
-        // --- 3. CONTENU ---
+        // --- 3. CONTENU & STATUT ---
         holder.tvDescription.setText(incident.getDescription());
         holder.tvStatus.setText(incident.getStatut());
 
-        // --- 4. MEDIA ADAPTATIF ---
+        // Logique visuelle du badge de statut
+        if (incident.isTraite()) {
+            holder.tvStatus.setBackgroundResource(R.drawable.status_traite_bg);
+        } else {
+            holder.tvStatus.setBackgroundResource(R.drawable.status_new_bg);
+        }
+
+        // --- 4. MÉDIA (Photo de l'incident) ---
         if (incident.hasMedia()) {
-            holder.imgPhoto.setVisibility(View.VISIBLE);
+            holder.cardMediaContainer.setVisibility(View.VISIBLE);
             Glide.with(context)
                     .load(incident.getPhotoUrl())
-                    .fitCenter()
+                    .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .placeholder(R.drawable.ic_incident_placeholder)
                     .into(holder.imgPhoto);
 
@@ -111,106 +112,70 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
                 if (actionListener != null) actionListener.onImageClick(incident);
             });
         } else {
-            holder.imgPhoto.setVisibility(View.GONE);
-            holder.imgPhoto.setOnClickListener(null);
+            holder.cardMediaContainer.setVisibility(View.GONE);
         }
 
-        // --- 5. LOGIQUE DES BOUTONS ADMIN (Droits) ---
-        boolean isOwner = (incident.getIdUtilisateur() != null && incident.getIdUtilisateur().equals(currentUserId));
+        // --- 5. LOGIQUE DES DROITS (Visibilité des boutons) ---
+        boolean isOwner = incident.getIdUtilisateur() != null && incident.getIdUtilisateur().equals(currentUserId);
         boolean isAdmin = "admin".equalsIgnoreCase(currentUserRole);
         boolean isAuthority = "autorite".equalsIgnoreCase(currentUserRole);
-        boolean isTraite = "Traité".equalsIgnoreCase(incident.getStatut());
 
-        // Visibilité Edit/Delete
-        if (isOwner || isAdmin) {
-            holder.btnEdit.setVisibility(View.VISIBLE);
-            holder.btnDelete.setVisibility(View.VISIBLE);
-            holder.btnEdit.setOnClickListener(v -> { if (actionListener != null) actionListener.onEditClick(incident); });
-            holder.btnDelete.setOnClickListener(v -> { if (actionListener != null) actionListener.onDeleteClick(incident); });
-        } else {
-            holder.btnEdit.setVisibility(View.GONE);
-            holder.btnDelete.setVisibility(View.GONE);
-        }
+        // Modifier/Supprimer (Auteur ou Admin)
+        int editVisibility = (isOwner || isAdmin) ? View.VISIBLE : View.GONE;
+        holder.btnEdit.setVisibility(editVisibility);
+        holder.btnDelete.setVisibility(editVisibility);
 
-        // Visibilité Valider
-        if ((isAuthority || isAdmin) && !isTraite) {
-            holder.btnValidate.setVisibility(View.VISIBLE);
-            holder.btnValidate.setOnClickListener(v -> { if (actionListener != null) actionListener.onValidateClick(incident); });
-        } else {
-            holder.btnValidate.setVisibility(View.GONE);
-        }
+        // Valider (Autorité ou Admin et seulement si Nouveau)
+        holder.btnValidate.setVisibility(((isAuthority || isAdmin) && !incident.isTraite()) ? View.VISIBLE : View.GONE);
 
-        // --- 6. ACTIONS SOCIALES ET CARTE ---
+        // Click Listeners Admin
+        holder.btnEdit.setOnClickListener(v -> { if (actionListener != null) actionListener.onEditClick(incident); });
+        holder.btnDelete.setOnClickListener(v -> { if (actionListener != null) actionListener.onDeleteClick(incident); });
+        holder.btnValidate.setOnClickListener(v -> { if (actionListener != null) actionListener.onValidateClick(incident); });
 
-        // Carte
-        holder.btnMap.setOnClickListener(v -> { if (actionListener != null) actionListener.onMapClick(incident); });
-
-        // Commentaires (AJOUT)
-        holder.tvCommentsCount.setText(String.valueOf(incident.getCommentsCount()));
-        holder.btnComment.setOnClickListener(v -> {
-            if (actionListener != null) actionListener.onCommentClick(incident);
-        });
-
-        // Likes
+        // --- 6. ACTIONS SOCIALES & CARTE ---
         holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
+        holder.tvCommentsCount.setText(String.valueOf(incident.getCommentsCount()));
 
+        // État du bouton Like
         if (incident.isLikedBy(currentUserId)) {
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light));
         } else {
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.darker_gray));
         }
 
+        // Listeners
         holder.btnLike.setOnClickListener(v -> toggleLike(incident, holder));
+        holder.btnComment.setOnClickListener(v -> { if (actionListener != null) actionListener.onCommentClick(incident); });
+        holder.btnMap.setOnClickListener(v -> { if (actionListener != null) actionListener.onMapClick(incident); });
     }
 
-    /**
-     * Gère l'ajout ou le retrait d'un like avec Optimistic UI complet.
-     */
     private void toggleLike(Incident incident, IncidentViewHolder holder) {
         if (currentUserId == null) {
-            Toast.makeText(context, "Vous devez être connecté pour aimer.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "Connectez-vous pour aimer.", Toast.LENGTH_SHORT).show();
             return;
         }
 
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         boolean isLiked = incident.isLikedBy(currentUserId);
 
+        // UI Optimiste
         if (isLiked) {
-            // RETIRER LIKE
             incident.getLikedBy().remove(currentUserId);
             incident.setLikesCount(Math.max(0, incident.getLikesCount() - 1));
-
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.darker_gray));
-            holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
-
-            db.collection("incidents").document(incident.getId())
-                    .update("likesCount", FieldValue.increment(-1),
-                            "likedBy", FieldValue.arrayRemove(currentUserId))
-                    .addOnFailureListener(e -> {
-                        incident.getLikedBy().add(currentUserId);
-                        incident.setLikesCount(incident.getLikesCount() + 1);
-                        holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light));
-                        holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
-                    });
-
         } else {
-            // AJOUTER LIKE
             incident.getLikedBy().add(currentUserId);
             incident.setLikesCount(incident.getLikesCount() + 1);
-
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light));
-            holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
-
-            db.collection("incidents").document(incident.getId())
-                    .update("likesCount", FieldValue.increment(1),
-                            "likedBy", FieldValue.arrayUnion(currentUserId))
-                    .addOnFailureListener(e -> {
-                        incident.getLikedBy().remove(currentUserId);
-                        incident.setLikesCount(Math.max(0, incident.getLikesCount() - 1));
-                        holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.darker_gray));
-                        holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
-                    });
         }
+        holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
+
+        // Sync Firestore
+        db.collection("incidents").document(incident.getId())
+                .update("likesCount", FieldValue.increment(isLiked ? -1 : 1),
+                        "likedBy", isLiked ? FieldValue.arrayRemove(currentUserId) : FieldValue.arrayUnion(currentUserId))
+                .addOnFailureListener(e -> notifyDataSetChanged()); // Rollback en cas d'erreur
     }
 
     @Override
@@ -223,12 +188,12 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         notifyDataSetChanged();
     }
 
-    // --- VIEWHOLDER ---
-    public static class IncidentViewHolder extends RecyclerView.ViewHolder {
+    static class IncidentViewHolder extends RecyclerView.ViewHolder {
         TextView tvDescription, tvCategoryDate, tvStatus, tvUsername;
-        TextView tvLikesCount, tvCommentsCount; // Compteurs
+        TextView tvLikesCount, tvCommentsCount;
         ImageView imgPhoto, imgProfile;
-        ImageButton btnMap, btnEdit, btnDelete, btnValidate, btnLike, btnComment; // Boutons
+        View cardMediaContainer;
+        ImageButton btnMap, btnEdit, btnDelete, btnValidate, btnLike, btnComment;
 
         public IncidentViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -238,16 +203,14 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
             tvStatus = itemView.findViewById(R.id.tv_status);
             tvDescription = itemView.findViewById(R.id.tv_description);
             imgPhoto = itemView.findViewById(R.id.img_incident_photo);
+            cardMediaContainer = itemView.findViewById(R.id.card_media_container);
 
-            // Compteurs
             tvLikesCount = itemView.findViewById(R.id.tv_likes_count);
             tvCommentsCount = itemView.findViewById(R.id.tv_comments_count);
 
-            // Boutons
             btnMap = itemView.findViewById(R.id.btn_open_map);
             btnLike = itemView.findViewById(R.id.btn_like);
-            btnComment = itemView.findViewById(R.id.btn_comment); // Binding commentaire
-
+            btnComment = itemView.findViewById(R.id.btn_comment);
             btnEdit = itemView.findViewById(R.id.btn_edit_incident);
             btnDelete = itemView.findViewById(R.id.btn_delete_incident);
             btnValidate = itemView.findViewById(R.id.btn_validate_incident);

@@ -3,16 +3,22 @@ package com.example.safecity.model;
 import com.google.firebase.firestore.DocumentId;
 import java.util.Date;
 
+/**
+ * Modèle pour les notifications et alertes.
+ * Les setters ont été corrigés pour permettre la désérialisation Firestore.
+ */
 public class NotificationApp {
+
     @DocumentId
     private String id;
     private String titre;
     private String message;
     private Date date;
-    private String type; // "alerte", "info", "validation"
+    private String type; // "alerte", "info", "validation", "ALERTE_OFFICIELLE"
     private boolean lu;
 
-    public NotificationApp() {} // Constructeur vide requis par Firebase
+    // Constructeur vide OBLIGATOIRE pour Firebase
+    public NotificationApp() {}
 
     public NotificationApp(String titre, String message, String type) {
         this.titre = titre;
@@ -22,21 +28,23 @@ public class NotificationApp {
         this.lu = false;
     }
 
-    // Getters
+    // --- Getters et Setters (Corrigés) ---
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
     public String getTitre() { return titre; }
+    public void setTitre(String titre) { this.titre = titre; }
+
     public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+
     public Date getDate() { return date; }
+    public void setDate(Date date) { this.date = date; }
+
     public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public void setTitre(String title) {
-    }
-
-    public void setMessage(String message) {
-    }
-
-    public void setDate(Date date) {
-    }
-
-    public void setType(String alerteOfficielle) {
-    }
+    public boolean isLu() { return lu; }
+    public void setLu(boolean lu) { this.lu = lu; }
 }

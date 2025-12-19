@@ -1,120 +1,69 @@
 package com.example.safecity.model;
 
 import com.google.firebase.firestore.DocumentId;
+import com.google.firebase.firestore.Exclude;
 
 /**
- * Modèle représentant un utilisateur (citoyen, autorité ou admin).
- * Adapté pour Firestore.
+ * Modèle représentant un utilisateur SafeCity.
+ * Le grade est calculé dynamiquement pour éviter les désynchronisations.
  */
 public class Utilisateur {
 
-    @DocumentId // L'ID du document Firestore (ex: UID de l'utilisateur)
+    @DocumentId
     private String id;
 
     private String nom;
     private String email;
-    private String motDePasseHash; // Optionnel avec Firebase Auth
-    private String idRole; // FK vers la collection roles
+    private String motDePasseHash;
+    private String idRole; // "admin", "autorite", "citoyen"
     private String dateCreation;
-
-    // NOUVEAU : URL de la photo de profil (Avatar)
     private String photoProfilUrl;
-
-    // NOUVEAU CHAMP : Score de gamification
     private int score;
 
-    // --- Constructeur vide OBLIGATOIRE pour Firestore ---
     public Utilisateur() {
-        this.score = 0; // Valeur par défaut
+        this.score = 0;
     }
 
-    public Utilisateur(String id, String nom, String email,
-                       String motDePasseHash, String idRole, String dateCreation) {
+    public Utilisateur(String id, String nom, String email, String idRole, String dateCreation) {
         this.id = id;
         this.nom = nom;
         this.email = email;
-        this.motDePasseHash = motDePasseHash;
         this.idRole = idRole;
         this.dateCreation = dateCreation;
-        this.score = 0; // Initialisation par défaut
-    }
-
-    // Constructeur complet avec Photo
-    public Utilisateur(String id, String nom, String email,
-                       String motDePasseHash, String idRole, String dateCreation, String photoProfilUrl) {
-        this(id, nom, email, motDePasseHash, idRole, dateCreation);
-        this.photoProfilUrl = photoProfilUrl;
+        this.score = 0;
     }
 
     // --- Getters / Setters ---
-    public String getId() {
-        return id;
-    }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public String getNom() {
-        return nom;
-    }
+    public String getNom() { return nom; }
+    public void setNom(String nom) { this.nom = nom; }
 
-    public void setNom(String nom) {
-        this.nom = nom;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public String getEmail() {
-        return email;
-    }
+    public String getMotDePasseHash() { return motDePasseHash; }
+    public void setMotDePasseHash(String motDePasseHash) { this.motDePasseHash = motDePasseHash; }
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    public String getIdRole() { return idRole; }
+    public void setIdRole(String idRole) { this.idRole = idRole; }
 
-    public String getMotDePasseHash() {
-        return motDePasseHash;
-    }
+    public String getDateCreation() { return dateCreation; }
+    public void setDateCreation(String dateCreation) { this.dateCreation = dateCreation; }
 
-    public void setMotDePasseHash(String motDePasseHash) {
-        this.motDePasseHash = motDePasseHash;
-    }
+    public String getPhotoProfilUrl() { return photoProfilUrl; }
+    public void setPhotoProfilUrl(String photoProfilUrl) { this.photoProfilUrl = photoProfilUrl; }
 
-    public String getIdRole() {
-        return idRole;
-    }
+    public int getScore() { return score; }
+    public void setScore(int score) { this.score = score; }
 
-    public void setIdRole(String idRole) {
-        this.idRole = idRole;
-    }
-
-    public String getDateCreation() {
-        return dateCreation;
-    }
-
-    public void setDateCreation(String dateCreation) {
-        this.dateCreation = dateCreation;
-    }
-
-    // NOUVEAU : Getter/Setter Photo de Profil
-    public String getPhotoProfilUrl() {
-        return photoProfilUrl;
-    }
-
-    public void setPhotoProfilUrl(String photoProfilUrl) {
-        this.photoProfilUrl = photoProfilUrl;
-    }
-
-    // --- GESTION DU SCORE (GAMIFICATION) ---
-
-    public int getScore() {
-        return score;
-    }
-
-    public void setScore(int score) {
-        this.score = score;
-    }
-
-    // Méthode utilitaire pour déterminer le grade
+    /**
+     * Calcule le grade en fonction du score actuel.
+     * @Exclude empêche Firestore d'essayer d'écrire ce champ en base.
+     */
+    @Exclude
     public String getGrade() {
         if (score < 50) return "Novice";
         if (score < 100) return "Éclaireur";
@@ -122,9 +71,8 @@ public class Utilisateur {
         return "Héros de la Cité";
     }
 
-    // --- Utilitaire ---
     @Override
     public String toString() {
-        return nom + " (" + email + ") - " + getGrade();
+        return nom + " (" + getGrade() + ")";
     }
 }

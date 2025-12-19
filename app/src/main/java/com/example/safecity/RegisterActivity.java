@@ -3,30 +3,35 @@ package com.example.safecity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.View;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ProgressBar;
+import android.util.Patterns;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.safecity.model.Utilisateur;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-import java.util.Date;
-
+/**
+ * Logique d'inscription optimisée pour le layout Material Design.
+ * Gère la validation des champs, la création Auth et la synchronisation Firestore.
+ */
 public class RegisterActivity extends AppCompatActivity {
 
-    private EditText etName, etEmail, etPass;
-    private Button btnRegister;
-    private TextView tvLogin;
+    // Conteneurs pour les erreurs visuelles
+    private TextInputLayout tilName, tilEmail, tilPassword;
+    // Champs de saisie
+    private TextInputEditText etName, etEmail, etPassword;
+    private MaterialButton btnRegister;
+    private TextView tvGoToLogin;
 
-    private FirebaseAuth auth;
+    private FirebaseAuth mAuth;
     private FirebaseFirestore db;
 
     @Override
@@ -34,86 +39,123 @@ public class RegisterActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_register);
 
-        // 1. Initialisation Firebase
-        auth = FirebaseAuth.getInstance();
+        // Initialisation Firebase
+        mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // 2. Liaison UI
+        // Liaison des vues avec les IDs du XML amélioré
+        tilName = findViewById(R.id.til_register_name);
+        tilEmail = findViewById(R.id.til_register_email);
+        tilPassword = findViewById(R.id.til_register_password);
+
         etName = findViewById(R.id.et_register_name);
         etEmail = findViewById(R.id.et_register_email);
-        etPass = findViewById(R.id.et_register_password);
-        btnRegister = findViewById(R.id.btn_register);
-        tvLogin = findViewById(R.id.tv_go_to_login);
+        etPassword = findViewById(R.id.et_register_password);
 
-        btnRegister.setOnClickListener(v -> registerUser());
-        tvLogin.setOnClickListener(v -> finish());
+        btnRegister = findViewById(R.id.btn_register);
+        tvGoToLogin = findViewById(R.id.tv_go_to_login);
+
+        // Listeners
+        btnRegister.setOnClickListener(v -> attemptRegistration());
+        tvGoToLogin.setOnClickListener(v -> finish()); // Retourne simplement à l'écran précédent (Login)
     }
 
-    private void registerUser() {
-        String nom = etName.getText().toString().trim();
+    /**
+     * Valide les champs et lance la procédure Firebase.
+     */
+    private void attemptRegistration() {
+        String name = etName.getText().toString().trim();
         String email = etEmail.getText().toString().trim();
-        String pass = etPass.getText().toString().trim();
+        String password = etPassword.getText().toString().trim();
 
-        if (TextUtils.isEmpty(nom) || TextUtils.isEmpty(email) || TextUtils.isEmpty(pass)) {
-            Toast.makeText(this, "Veuillez tout remplir", Toast.LENGTH_SHORT).show();
-            return;
+        // Réinitialisation des erreurs
+        tilName.setError(null);
+        tilEmail.setError(null);
+        tilPassword.setError(null);
+
+        // Validation locale
+        boolean isValid = true;
+
+        if (TextUtils.isEmpty(name)) {
+            tilName.setError("Le nom est requis");
+            isValid = false;
         }
 
-        if (pass.length() < 6) {
-            Toast.makeText(this, "Le mot de passe doit faire 6 caractères min.", Toast.LENGTH_SHORT).show();
-            return;
+        if (TextUtils.isEmpty(email) || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            tilEmail.setError("Veuillez entrer un email valide");
+            isValid = false;
         }
 
-        // Désactiver le bouton pour éviter les doubles clics
+        if (TextUtils.isEmpty(password) || password.length() < 6) {
+            tilPassword.setError("Le mot de passe doit contenir au moins 6 caractères");
+            isValid = false;
+        }
+
+        if (!isValid) return;
+
+        // Désactivation du bouton pour éviter les envois multiples
         btnRegister.setEnabled(false);
+        Toast.makeText(this, "Création de votre profil citoyen...", Toast.LENGTH_SHORT).show();
 
-        // 3. Création dans Firebase Auth
-        auth.createUserWithEmailAndPassword(email, pass)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        FirebaseUser firebaseUser = auth.getCurrentUser();
-
-                        // 4. Mise à jour du profil (Nom) dans Auth
-                        UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
-                                .setDisplayName(nom)
-                                .build();
-
-                        if (firebaseUser != null) {
-                            firebaseUser.updateProfile(profileUpdates);
-
-                            // 5. Sauvegarder les infos sup. dans Firestore
-                            saveUserToFirestore(firebaseUser.getUid(), nom, email);
-                        }
-                    } else {
-                        btnRegister.setEnabled(true);
-                        Toast.makeText(RegisterActivity.this, "Erreur : " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
+        // 1. Création du compte dans Firebase Auth
+        mAuth.createUserWithEmailAndPassword(email, password)
+                .addOnSuccessListener(authResult -> {
+                    FirebaseUser user = authResult.getUser();
+                    if (user != null) {
+                        // 2. Mise à jour du profil (nom d'affichage)
+                        updateAuthProfile(user, name);
                     }
+                })
+                .addOnFailureListener(e -> {
+                    btnRegister.setEnabled(true);
+                    Toast.makeText(this, "Échec : " + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
     }
 
-    private void saveUserToFirestore(String uid, String nom, String email) {
-        // On crée un objet Utilisateur pour Firestore
-        Utilisateur newUser = new Utilisateur();
-        newUser.setNom(nom);
-        newUser.setEmail(email);
-        newUser.setIdRole("citoyen");
+    private void updateAuthProfile(FirebaseUser user, String name) {
+        UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
+                .setDisplayName(name)
+                .build();
 
-        // --- CORRECTION : AJOUT DE LA DATE DE CRÉATION ---
-        // On utilise le timestamp système actuel converti en String
-        // Cela permet de savoir quand l'utilisateur s'est inscrit
+        user.updateProfile(profileUpdates).addOnCompleteListener(task -> {
+            // 3. Une fois le profil Auth mis à jour, on enregistre dans Firestore
+            saveUserToFirestore(user, name);
+        });
+    }
+
+    /**
+     * Initialise les données de l'utilisateur dans la base Firestore.
+     */
+    private void saveUserToFirestore(FirebaseUser user, String name) {
+        Utilisateur newUser = new Utilisateur();
+
+        // Correction : Utilisation de setId conformément au modèle Utilisateur (@DocumentId)
+        newUser.setId(user.getUid());
+
+        newUser.setNom(name);
+        newUser.setEmail(user.getEmail());
+        newUser.setIdRole("citoyen"); // Rôle par défaut
+        newUser.setScore(0);
+
+        // Correction : Suppression de setGrade car le grade est une méthode calculée
+        // getGrade() dans votre modèle basée sur le score.
+
         newUser.setDateCreation(String.valueOf(System.currentTimeMillis()));
 
-        db.collection("users").document(uid)
+        // Enregistrement dans la collection "utilisateurs"
+        db.collection("utilisateurs").document(user.getUid())
                 .set(newUser)
                 .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(RegisterActivity.this, "Compte créé avec succès !", Toast.LENGTH_SHORT).show();
-                    // Rediriger vers MainActivity (ou Login)
-                    startActivity(new Intent(RegisterActivity.this, MainActivity.class));
+                    Toast.makeText(this, "Bienvenue " + name + " !", Toast.LENGTH_SHORT).show();
+                    // Redirection vers l'accueil en vidant la pile d'activités
+                    Intent intent = new Intent(this, MainActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
                     finish();
                 })
                 .addOnFailureListener(e -> {
                     btnRegister.setEnabled(true);
-                    Toast.makeText(RegisterActivity.this, "Compte Auth créé mais erreur sauvegarde Firestore : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Erreur lors de la création du profil : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
     }
 }

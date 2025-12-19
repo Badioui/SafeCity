@@ -1,10 +1,15 @@
 package com.example.safecity.utils;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -13,6 +18,11 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 
+/**
+ * Utilitaire pour simplifier la récupération de la position GPS de l'utilisateur.
+ * Cette version conserve votre code original pour ne pas casser les autres fichiers,
+ * tout en ajoutant la compatibilité pour MapFragment.
+ */
 public class LocationHelper {
 
     private static final String TAG = "LocationHelper";
@@ -20,6 +30,7 @@ public class LocationHelper {
     private final Context context; // ✅ Correction du crash (contexte conservé)
     private LocationCallback locationCallback;
 
+    // --- VOTRE CODE ORIGINAL (NE PAS TOUCHER) ---
     public interface LocationListener {
         void onLocationReceived(Location location);
         void onLocationError(String message);
@@ -30,20 +41,14 @@ public class LocationHelper {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
     }
 
-    /**
-     * Démarre la récupération de la localisation.
-     * Tente d'abord la dernière position connue (rapide), sinon lance le GPS.
-     */
     @SuppressLint("MissingPermission")
     public void startLocationUpdates(LocationListener listener) {
-        // Vérification des permissions via le contexte de l'application
-        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
             listener.onLocationError("Permission de localisation manquante.");
             return;
         }
 
-        // 1. Essayer d'abord d'avoir la dernière position connue (Instantané)
         fusedLocationClient.getLastLocation()
                 .addOnSuccessListener(location -> {
                     if (location != null) {
@@ -60,30 +65,22 @@ public class LocationHelper {
                 });
     }
 
-    /**
-     * Lance une nouvelle recherche GPS active (si la dernière position est vide).
-     */
     @SuppressLint("MissingPermission")
     private void requestNewLocationData(LocationListener listener) {
-        // Configuration de la requête : Haute précision, update toutes les 5s
-        // Utiliser BALANCED_POWER_ACCURACY permet d'utiliser le Wifi/Réseau si le GPS capte mal
         LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 5000)
                 .setMinUpdateIntervalMillis(2000)
-                .setMinUpdateDistanceMeters(10) // Accepter un déplacement de 10m minimum
+                .setMinUpdateDistanceMeters(10)
                 .build();
-
 
         locationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) {
-                    return;
-                }
+                if (locationResult == null) return;
                 for (Location location : locationResult.getLocations()) {
                     if (location != null) {
                         Log.i(TAG, "Nouvelle position GPS reçue.");
                         listener.onLocationReceived(location);
-                        stopLocationUpdates(); // On arrête après avoir reçu une position pour économiser la batterie
+                        stopLocationUpdates();
                         return;
                     }
                 }
@@ -99,14 +96,52 @@ public class LocationHelper {
         }
     }
 
-    /**
-     * Arrête le service de localisation
-     */
     public void stopLocationUpdates() {
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
             locationCallback = null;
             Log.d(TAG, "Mises à jour de localisation arrêtées.");
         }
+    }
+
+    // --- AJOUT POUR MAPFRAGMENT (SANS TOUCHER AU RESTE) ---
+
+    public interface OnLocationResultListener {
+        void onLocationResult(Location location);
+    }
+
+    /**
+     * Nouvelle méthode ajoutée pour la compatibilité avec MapFragment.
+     */
+    @SuppressLint("MissingPermission")
+    public void getLastKnownLocation(OnLocationResultListener listener) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            listener.onLocationResult(null);
+            return;
+        }
+
+        fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+            if (location != null) {
+                listener.onLocationResult(location);
+            } else {
+                // Rabattre sur une requête unique si le cache est vide
+                requestSingleUpdate(listener);
+            }
+        });
+    }
+
+    @SuppressLint("MissingPermission")
+    private void requestSingleUpdate(OnLocationResultListener listener) {
+        LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+                .setMaxUpdates(1)
+                .build();
+
+        fusedLocationClient.requestLocationUpdates(request, new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+                listener.onLocationResult(locationResult.getLastLocation());
+                fusedLocationClient.removeLocationUpdates(this);
+            }
+        }, Looper.getMainLooper());
     }
 }

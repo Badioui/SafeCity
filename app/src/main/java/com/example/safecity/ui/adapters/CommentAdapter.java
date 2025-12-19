@@ -12,14 +12,20 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.signature.ObjectKey;
 import com.example.safecity.R;
 import com.example.safecity.model.Comment;
 
 import java.util.List;
 
+/**
+ * Adaptateur pour la liste des commentaires.
+ * Optimisé pour le layout item_comment.xml avec gestion dynamique du cache Glide.
+ */
 public class CommentAdapter extends RecyclerView.Adapter<CommentAdapter.CommentViewHolder> {
 
-    private Context context;
+    private final Context context;
     private List<Comment> commentList;
 
     public CommentAdapter(Context context, List<Comment> commentList) {
@@ -41,14 +47,16 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentAdapter.CommentV
         holder.tvUsername.setText(comment.getNomUtilisateur());
         holder.tvText.setText(comment.getTexte());
 
-        // Avatar
+        // Gestion de l'avatar avec signature pour forcer le refresh si l'utilisateur change sa photo
         Glide.with(context)
                 .load(comment.getAuteurPhotoUrl())
-                .circleCrop()
                 .placeholder(R.drawable.ic_profile)
+                .circleCrop()
+                .signature(new ObjectKey(comment.getAuteurPhotoUrl() != null ? comment.getAuteurPhotoUrl() : "default"))
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(holder.imgProfile);
 
-        // Date relative
+        // Date relative (ex: "il y a 5 min")
         if (comment.getDatePublication() != null) {
             long time = comment.getDatePublication().getTime();
             long now = System.currentTimeMillis();
@@ -60,7 +68,7 @@ public class CommentAdapter extends RecyclerView.Adapter<CommentAdapter.CommentV
 
     @Override
     public int getItemCount() {
-        return commentList.size();
+        return commentList != null ? commentList.size() : 0;
     }
 
     public void updateData(List<Comment> newList) {

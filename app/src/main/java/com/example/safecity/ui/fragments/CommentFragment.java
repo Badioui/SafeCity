@@ -6,7 +6,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,6 +22,7 @@ import com.example.safecity.utils.FirestoreRepository;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -31,8 +31,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fragment de type BottomSheet pour afficher et ajouter des commentaires.
- * Cette version coulissante permet une navigation plus fluide.
+ * Fragment Premium de type BottomSheet pour l'espace de discussion.
+ * Utilise BottomSheetDialogFragment pour un affichage coulissant moderne.
+ * Synchronisé avec le layout fragment_comment.xml (Barre de saisie flottante).
  */
 public class CommentFragment extends BottomSheetDialogFragment {
 
@@ -42,13 +43,16 @@ public class CommentFragment extends BottomSheetDialogFragment {
     private RecyclerView recyclerView;
     private CommentAdapter adapter;
     private EditText etInput;
-    private ImageButton btnSend;
+    private FloatingActionButton btnSend;
     private TextView tvEmpty;
 
     private FirestoreRepository repo;
     private ListenerRegistration listenerRegistration;
     private Utilisateur currentUserData;
 
+    /**
+     * Méthode statique pour créer une instance du fragment avec l'ID de l'incident concerné.
+     */
     public static CommentFragment newInstance(String incidentId) {
         CommentFragment fragment = new CommentFragment();
         Bundle args = new Bundle();
@@ -57,19 +61,10 @@ public class CommentFragment extends BottomSheetDialogFragment {
         return fragment;
     }
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        // Style pour avoir des coins arrondis en haut du BottomSheet
-        setStyle(STYLE_NORMAL, R.style.AppBottomSheetDialogTheme);
-        if (getArguments() != null) {
-            incidentId = getArguments().getString(ARG_INCIDENT_ID);
-        }
-    }
-
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        // Chargement du layout Premium
         return inflater.inflate(R.layout.fragment_comment, container, false);
     }
 
@@ -77,13 +72,15 @@ public class CommentFragment extends BottomSheetDialogFragment {
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
         BottomSheetDialog dialog = (BottomSheetDialog) super.onCreateDialog(savedInstanceState);
-        // Force l'ouverture du BottomSheet en plein écran ou état déplié
+
+        // Force l'ouverture du volet en mode "étendu" (pleine hauteur possible)
         dialog.setOnShowListener(dialogInterface -> {
             BottomSheetDialog d = (BottomSheetDialog) dialogInterface;
             View bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
             if (bottomSheet != null) {
-                BottomSheetBehavior.from(bottomSheet).setState(BottomSheetBehavior.STATE_EXPANDED);
-                BottomSheetBehavior.from(bottomSheet).setSkipCollapsed(true);
+                BottomSheetBehavior<View> behavior = BottomSheetBehavior.from(bottomSheet);
+                behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+                behavior.setSkipCollapsed(true);
             }
         });
         return dialog;
@@ -93,29 +90,43 @@ public class CommentFragment extends BottomSheetDialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Liaison des composants UI
         recyclerView = view.findViewById(R.id.recycler_comments);
         etInput = view.findViewById(R.id.et_comment_input);
         btnSend = view.findViewById(R.id.btn_send_comment);
         tvEmpty = view.findViewById(R.id.tv_no_comments);
 
+        // Configuration de la liste
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new CommentAdapter(getContext(), new ArrayList<>());
         recyclerView.setAdapter(adapter);
 
         repo = new FirestoreRepository();
+
+        if (getArguments() != null) {
+            incidentId = getArguments().getString(ARG_INCIDENT_ID);
+        }
+
+        // Chargement des données nécessaires
         loadCurrentUserInfo();
         startListeningComments();
 
+        // Listener d'envoi
         btnSend.setOnClickListener(v -> postComment());
     }
 
+    /**
+     * Récupère les infos de l'utilisateur connecté pour marquer le commentaire.
+     */
     private void loadCurrentUserInfo() {
         String uid = FirebaseAuth.getInstance().getUid();
         if (uid != null) {
             repo.getUser(uid, new FirestoreRepository.OnUserLoadedListener() {
                 @Override
                 public void onUserLoaded(Utilisateur utilisateur) {
-                    currentUserData = utilisateur;
+                    if (isAdded()) {
+                        currentUserData = utilisateur;
+                    }
                 }
                 @Override
                 public void onError(Exception e) {}
@@ -123,13 +134,21 @@ public class CommentFragment extends BottomSheetDialogFragment {
         }
     }
 
+    /**
+     * Écoute en temps réel les nouveaux commentaires sur Firestore.
+     */
     private void startListeningComments() {
+        if (incidentId == null) return;
+
         listenerRegistration = repo.getCommentsRealtime(incidentId, new FirestoreRepository.OnCommentsLoadedListener() {
             @Override
             public void onCommentsLoaded(List<Comment> comments) {
                 if (!isAdded()) return;
+
                 adapter.updateData(comments);
                 tvEmpty.setVisibility(comments.isEmpty() ? View.VISIBLE : View.GONE);
+
+                // Auto-scroll vers le dernier commentaire reçu
                 if (!comments.isEmpty()) {
                     recyclerView.smoothScrollToPosition(comments.size() - 1);
                 }
@@ -137,21 +156,28 @@ public class CommentFragment extends BottomSheetDialogFragment {
 
             @Override
             public void onError(Exception e) {
-                Toast.makeText(getContext(), "Erreur de chargement", Toast.LENGTH_SHORT).show();
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Impossible de charger les messages", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
 
+    /**
+     * Envoie le commentaire vers Firestore via une transaction (pour mettre à jour le compteur).
+     */
     private void postComment() {
         String text = etInput.getText().toString().trim();
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
 
         if (text.isEmpty()) return;
+
         if (fbUser == null || currentUserData == null) {
-            Toast.makeText(getContext(), "Veuillez patienter...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Initialisation du profil...", Toast.LENGTH_SHORT).show();
             return;
         }
 
+        // Création de l'objet Commentaire
         Comment comment = new Comment(
                 incidentId,
                 fbUser.getUid(),
@@ -160,7 +186,9 @@ public class CommentFragment extends BottomSheetDialogFragment {
                 text
         );
 
+        // Feedback visuel (évite le double envoi)
         btnSend.setEnabled(false);
+
         repo.addComment(comment, new FirestoreRepository.OnFirestoreTaskComplete() {
             @Override
             public void onSuccess() {
@@ -183,6 +211,9 @@ public class CommentFragment extends BottomSheetDialogFragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        if (listenerRegistration != null) listenerRegistration.remove();
+        // Arrêt de l'écouteur Firestore pour économiser les ressources et éviter les fuites
+        if (listenerRegistration != null) {
+            listenerRegistration.remove();
+        }
     }
 }

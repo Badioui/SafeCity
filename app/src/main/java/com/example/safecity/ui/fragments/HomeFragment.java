@@ -50,11 +50,12 @@ import java.util.List;
 
 /**
  * Fragment principal affichant le flux d'incidents signalés.
- * Gère le filtrage par recherche textuelle et par catégorie.
+ * Gère le filtrage par recherche textuelle et par catégorie de manière synchronisée avec le XML.
  */
 public class HomeFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
     private RecyclerView recyclerView;
+    private View layoutEmptyState; // Conteneur complet de l'état vide
     private TextView tvEmptyState;
     private IncidentAdapter adapter;
     private FirestoreRepository firestoreRepo;
@@ -87,7 +88,9 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Liaison avec les nouveaux IDs du XML
         recyclerView = view.findViewById(R.id.recycler_view_home);
+        layoutEmptyState = view.findViewById(R.id.layout_empty_state);
         tvEmptyState = view.findViewById(R.id.tv_empty_state);
         chipGroup = view.findViewById(R.id.chip_group_filters_home);
 
@@ -131,7 +134,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             });
         }
 
-        // --- LISTENER CHIPS ---
+        // --- LISTENER CHIPS (Synchronisé avec les nouveaux IDs) ---
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery));
     }
 
@@ -219,6 +222,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String categoryFilter = null;
         int checkedId = chipGroup.getCheckedChipId();
 
+        // Synchronisation des catégories avec les Chips du XML
         if (checkedId == R.id.chip_accident) categoryFilter = "Accident";
         else if (checkedId == R.id.chip_vol) categoryFilter = "Vol";
         else if (checkedId == R.id.chip_incendie) categoryFilter = "Incendie";
@@ -248,14 +252,17 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         adapter.updateData(filteredList);
 
+        // Gestion de l'affichage de l'état vide ou de la liste
         if (filteredList.isEmpty()) {
-            tvEmptyState.setVisibility(View.VISIBLE);
-            if (categoryFilter != null) tvEmptyState.setText("Aucun '" + categoryFilter + "' trouvé.");
-            else if (queryLower != null) tvEmptyState.setText("Aucun résultat pour \"" + queryText + "\"");
-            else tvEmptyState.setText("Aucun incident signalé.");
+            if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.VISIBLE);
+            if (tvEmptyState != null) {
+                if (categoryFilter != null) tvEmptyState.setText("Aucun '" + categoryFilter + "' trouvé.");
+                else if (queryLower != null) tvEmptyState.setText("Aucun résultat pour \"" + queryText + "\"");
+                else tvEmptyState.setText("Aucun signalement trouvé.\nSoyez le premier à informer la ville !");
+            }
             recyclerView.setVisibility(View.GONE);
         } else {
-            tvEmptyState.setVisibility(View.GONE);
+            if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
         }
     }
@@ -434,10 +441,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         new MaterialAlertDialogBuilder(requireContext()).setTitle("Tableau de Bord").setMessage(msg).setPositiveButton("OK", null).show();
     }
 
-    // --- CORRECTION : OUVERTURE DES COMMENTAIRES EN BOTTOMSHEET ---
     @Override
     public void onCommentClick(Incident incident) {
-        // On utilise maintenant le BottomSheetDialogFragment au lieu d'une transaction de fragment classique
         CommentFragment bottomSheet = CommentFragment.newInstance(incident.getId());
         bottomSheet.show(getParentFragmentManager(), "CommentBottomSheet");
     }

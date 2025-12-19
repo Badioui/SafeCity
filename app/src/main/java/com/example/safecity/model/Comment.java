@@ -1,5 +1,6 @@
 package com.example.safecity.model;
 
+import com.google.firebase.firestore.DocumentId;
 import com.google.firebase.firestore.IgnoreExtraProperties;
 import com.google.firebase.firestore.ServerTimestamp;
 
@@ -12,6 +13,7 @@ import java.util.Date;
 @IgnoreExtraProperties
 public class Comment {
 
+    @DocumentId
     private String id;
     private String idIncident;
     private String idUtilisateur;

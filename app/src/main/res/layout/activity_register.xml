@@ -1,51 +1,115 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp"
-    android:gravity="center">
+    android:fillViewport="true"
+    android:background="#F8F9FA">
 
-    <ImageView
-        android:layout_width="100dp"
-        android:layout_height="100dp"
-        android:src="@drawable/ic_profile"
-        android:layout_marginBottom="24dp"/>
-
-    <EditText
-        android:id="@+id/et_register_name"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Nom complet"
-        android:inputType="textPersonName"/>
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center">
 
-    <EditText
-        android:id="@+id/et_register_email"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Email"
-        android:inputType="textEmailAddress"
-        android:layout_marginTop="12dp"/>
+        <ImageView
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:src="@drawable/ic_profile"
+            app:tint="@color/black"
+            android:layout_marginBottom="32dp"/>
 
-    <EditText
-        android:id="@+id/et_register_password"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Mot de passe"
-        android:inputType="textPassword"
-        android:layout_marginTop="12dp"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Créer un compte"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#212121"
+            android:layout_marginBottom="8dp"/>
 
-    <Button
-        android:id="@+id/btn_register"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="S'inscrire"
-        android:layout_marginTop="24dp"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Rejoignez SafeCity pour protéger votre ville"
+            android:textSize="14sp"
+            android:alpha="0.6"
+            android:layout_marginBottom="32dp"/>
 
-    <TextView
-        android:id="@+id/tv_go_to_login"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Déjà un compte ? Se connecter"
-        android:padding="12dp"
-        android:layout_marginTop="12dp"/>
-</LinearLayout>
+        <!-- Nom Complet -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_register_name"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nom complet"
+            app:startIconDrawable="@drawable/ic_profile">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_register_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textPersonName"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Email -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_register_email"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Email"
+            android:layout_marginTop="16dp"
+            app:startIconDrawable="@android:drawable/ic_dialog_email">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_register_email"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textEmailAddress"/>
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Mot de Passe -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/til_register_password"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Mot de passe"
+            android:layout_marginTop="16dp"
+            app:endIconMode="password_toggle"
+            app:startIconDrawable="@android:drawable/ic_lock_idle_lock">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_register_password"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:inputType="textPassword" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_register"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="S'inscrire"
+            android:layout_marginTop="32dp"
+            app:cornerRadius="12dp"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/tv_go_to_login"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Déjà un compte ? Se connecter"
+            android:textColor="#116AC3"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:layout_marginTop="16dp"
+            android:background="?attr/selectableItemBackground"/>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

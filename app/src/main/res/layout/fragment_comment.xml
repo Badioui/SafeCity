@@ -1,65 +1,113 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:colorBackground">
+    android:background="@android:color/white">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar_comment"
+    <!-- 1. HEADER DU VOLET (Drag handle + Titre) -->
+    <View
+        android:id="@+id/drag_handle"
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_marginTop="12dp"
+        android:background="#E0E0E0"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tv_sheet_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Commentaires"
+        android:textColor="#212121"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/drag_handle" />
+
+    <View
+        android:id="@+id/header_divider"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorPrimary"
-        app:layout_constraintTop_toTopOf="parent"
-        app:navigationIcon="?attr/homeAsUpIndicator"
-        app:title="Commentaires"
-        app:titleTextColor="@android:color/white" />
+        android:layout_height="1dp"
+        android:layout_marginTop="16dp"
+        android:background="#F0F0F0"
+        app:layout_constraintTop_toBottomOf="@id/tv_sheet_title" />
 
+    <!-- 2. LISTE DES COMMENTAIRES -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_comments"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/layout_input_comment"
-        app:layout_constraintTop_toBottomOf="@id/toolbar_comment" />
+        android:clipToPadding="false"
+        android:paddingTop="8dp"
+        android:paddingBottom="80dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/header_divider"
+        tools:listitem="@layout/item_comment" />
 
+    <!-- État vide -->
     <TextView
         android:id="@+id/tv_no_comments"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Soyez le premier à commenter !"
+        android:text="Aucun commentaire pour le moment.\nSoyez le premier à réagir !"
+        android:gravity="center"
+        android:alpha="0.4"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@id/recycler_comments"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@id/recycler_comments" />
 
-    <LinearLayout
+    <!-- 3. BARRE DE SAISIE FLOTTANTE -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/layout_input_comment"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?android:colorBackground"
-        android:elevation="8dp"
-        android:orientation="horizontal"
-        android:padding="8dp"
+        android:layout_margin="12dp"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="8dp"
+        app:strokeWidth="0dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <EditText
-            android:id="@+id/et_comment_input"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/circle_bg_gray"
-            android:hint="Votre commentaire..."
-            android:padding="12dp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp">
 
-        <ImageButton
-            android:id="@+id/btn_send_comment"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_check"
-            app:tint="?attr/colorPrimary" />
+            <EditText
+                android:id="@+id/et_comment_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="Écrire un commentaire..."
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="4"
+                android:padding="12dp"
+                android:textSize="15sp" />
 
-    </LinearLayout>
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/btn_send_comment"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:fabSize="mini"
+                app:elevation="0dp"
+                android:src="@drawable/ic_check"
+                app:tint="@android:color/white"
+                app:backgroundTint="?attr/colorPrimary"
+                android:contentDescription="Envoyer" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
