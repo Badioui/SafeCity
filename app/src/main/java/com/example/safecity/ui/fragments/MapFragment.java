@@ -2,6 +2,9 @@ package com.example.safecity.ui.fragments;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -12,6 +15,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.SearchView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
@@ -19,6 +23,7 @@ import com.bumptech.glide.Glide;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 import com.example.safecity.utils.FirestoreRepository;
+import com.example.safecity.utils.LocationHelper;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -26,22 +31,32 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.maps.android.clustering.ClusterManager;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
+/**
+ * Fragment gérant la cartographie interactive.
+ * Intègre la recherche de lieux, le filtrage par catégorie et le clustering d'incidents.
+ */
 public class MapFragment extends Fragment implements OnMapReadyCallback {
 
     private GoogleMap googleMap;
     private FirestoreRepository firestoreRepo;
     private ClusterManager<Incident> clusterManager;
+    private LocationHelper locationHelper;
 
     private Double targetLat = null;
     private Double targetLng = null;
 
     private List<Incident> allIncidents = new ArrayList<>();
     private ChipGroup chipGroup;
+    private SearchView searchView;
+    private FloatingActionButton fabLocation;
 
     @Nullable
     @Override
@@ -60,6 +75,13 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         super.onViewCreated(view, savedInstanceState);
 
         firestoreRepo = new FirestoreRepository();
+        // Correction : Le constructeur de LocationHelper attend un seul argument (Activity)
+        locationHelper = new LocationHelper(requireActivity());
+
+        // Liaison des vues
+        chipGroup = view.findViewById(R.id.chip_group_filters);
+        searchView = view.findViewById(R.id.map_search_view);
+        fabLocation = view.findViewById(R.id.fab_my_location);
 
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map_fragment_view);
@@ -68,9 +90,26 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
             mapFragment.getMapAsync(this);
         }
 
-        chipGroup = view.findViewById(R.id.chip_group_filters);
+        setupListeners();
+    }
 
-        // --- LISTENER DES CHIPS (FILTRES) ---
+    private void setupListeners() {
+        // 1. Recherche de lieu via Geocoding
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                searchLocation(query);
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) { return false; }
+        });
+
+        // 2. Bouton Ma Position
+        fabLocation.setOnClickListener(v -> moveToCurrentLocation());
+
+        // 3. Filtrage par Chips
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.chip_all) {
                 updateMapMarkers(allIncidents);
@@ -88,13 +127,41 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         });
     }
 
+    private void searchLocation(String locationName) {
+        Geocoder geocoder = new Geocoder(getContext(), Locale.getDefault());
+        try {
+            List<Address> addressList = geocoder.getFromLocationName(locationName, 1);
+            if (addressList != null && !addressList.isEmpty()) {
+                Address address = addressList.get(0);
+                LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14));
+                searchView.clearFocus();
+            } else {
+                Toast.makeText(getContext(), "Lieu non trouvé", Toast.LENGTH_SHORT).show();
+            }
+        } catch (IOException e) {
+            Toast.makeText(getContext(), "Erreur de service de recherche", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void moveToCurrentLocation() {
+        // Correction : Utilisation de la méthode getLastKnownLocation de LocationHelper
+        locationHelper.getLastKnownLocation(location -> {
+            if (location != null && googleMap != null) {
+                LatLng current = new LatLng(location.getLatitude(), location.getLongitude());
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(current, 15));
+            } else {
+                Toast.makeText(getContext(), "GPS non disponible", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
     @Override
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
 
-        // Padding pour éviter que les Chips ne cachent le bouton "Ma Position"
-        int topPadding = 180;
-        this.googleMap.setPadding(0, topPadding, 0, 0);
+        // Décalage des contrôles Google (Zoom, Google Logo) pour ne pas être cachés par nos vues
+        this.googleMap.setPadding(0, 320, 0, 0);
 
         if (targetLat != null && targetLng != null) {
             LatLng target = new LatLng(targetLat, targetLng);
@@ -104,57 +171,46 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
             this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultLocation, 12));
         }
 
-        this.googleMap.getUiSettings().setZoomControlsEnabled(true);
+        googleMap.getUiSettings().setZoomControlsEnabled(false); // On cache les boutons +/- pour un look plus propre
+        googleMap.getUiSettings().setMyLocationButtonEnabled(false); // On utilise notre FAB personnalisé
 
-        // --- CONFIGURATION DU CLUSTER MANAGER ---
+        // Configuration du Clustering
         clusterManager = new ClusterManager<>(getContext(), googleMap);
         googleMap.setOnCameraIdleListener(clusterManager);
-
-        // Déléguer le clic sur le marqueur au ClusterManager
         googleMap.setOnMarkerClickListener(clusterManager);
 
-        // Gérer le clic sur un Item (Incident) du cluster
         clusterManager.setOnClusterItemClickListener(incident -> {
             showIncidentBottomSheet(incident);
-            return true; // Indique que l'événement est consommé
+            return true;
         });
 
         enableUserLocation();
         loadIncidentMarkers();
     }
 
-    // --- AFFICHER LE BOTTOM SHEET (DÉTAILS INCIDENT) ---
     private void showIncidentBottomSheet(Incident incident) {
         if (getContext() == null) return;
 
-        BottomSheetDialog bottomSheetDialog = new BottomSheetDialog(getContext());
-        View sheetView = LayoutInflater.from(getContext()).inflate(R.layout.layout_map_bottom_sheet, null);
-        bottomSheetDialog.setContentView(sheetView);
+        BottomSheetDialog dialog = new BottomSheetDialog(getContext());
+        View view = LayoutInflater.from(getContext()).inflate(R.layout.layout_map_bottom_sheet, null);
+        dialog.setContentView(view);
 
-        // Binding des vues du BottomSheet
-        ImageView imgProfile = sheetView.findViewById(R.id.sheet_img_profile);
-        TextView tvUsername = sheetView.findViewById(R.id.sheet_tv_username);
-        TextView tvCategory = sheetView.findViewById(R.id.sheet_tv_category);
-        TextView tvDescription = sheetView.findViewById(R.id.sheet_tv_description);
-        ImageView imgIncident = sheetView.findViewById(R.id.sheet_img_incident);
-        TextView tvLikes = sheetView.findViewById(R.id.sheet_tv_likes);
+        ImageView imgProfile = view.findViewById(R.id.sheet_img_profile);
+        TextView tvUsername = view.findViewById(R.id.sheet_tv_username);
+        TextView tvCategory = view.findViewById(R.id.sheet_tv_category);
+        TextView tvDescription = view.findViewById(R.id.sheet_tv_description);
+        ImageView imgIncident = view.findViewById(R.id.sheet_img_incident);
+        TextView tvLikes = view.findViewById(R.id.sheet_tv_likes);
 
-        // Remplissage des données
         tvUsername.setText(incident.getNomUtilisateur());
         tvCategory.setText(incident.getNomCategorie());
         tvDescription.setText(incident.getDescription());
-        tvLikes.setText(incident.getLikesCount() + " J'aime");
 
-        // Avatar utilisateur
-        if (incident.getAuteurPhotoUrl() != null && !incident.getAuteurPhotoUrl().isEmpty()) {
-            Glide.with(this).load(incident.getAuteurPhotoUrl()).circleCrop().into(imgProfile);
-        } else {
-            imgProfile.setImageResource(R.drawable.ic_profile);
-        }
+        // Correction : L'id sheet_tv_status n'existe pas dans le layout, on utilise tvLikes pour l'engagement
+        if (tvLikes != null) tvLikes.setText(incident.getLikesCount() + " J'aime");
 
-        // Photo Incident (Gestion adaptative)
-        // Note: Assurez-vous que la méthode hasMedia() existe dans votre modèle Incident,
-        // sinon remplacez par : if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty())
+        Glide.with(this).load(incident.getAuteurPhotoUrl()).circleCrop().placeholder(R.drawable.ic_profile).into(imgProfile);
+
         if (incident.hasMedia()) {
             imgIncident.setVisibility(View.VISIBLE);
             Glide.with(this).load(incident.getPhotoUrl()).into(imgIncident);
@@ -162,7 +218,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
             imgIncident.setVisibility(View.GONE);
         }
 
-        bottomSheetDialog.show();
+        dialog.show();
     }
 
     private void loadIncidentMarkers() {
@@ -171,62 +227,36 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
             public void onIncidentsLoaded(List<Incident> incidents) {
                 if (!isAdded()) return;
                 allIncidents = incidents;
-
-                // Réappliquer le filtre courant si nécessaire
-                int checkedId = chipGroup.getCheckedChipId();
-                if (checkedId == R.id.chip_accident) filterMarkers("Accident");
-                else if (checkedId == R.id.chip_vol) filterMarkers("Vol");
-                else if (checkedId == R.id.chip_incendie) filterMarkers("Incendie");
-                else if (checkedId == R.id.chip_panne) filterMarkers("Panne");
-                else if (checkedId == R.id.chip_autre) filterMarkers("Autre");
-                else updateMapMarkers(allIncidents);
+                updateMapMarkers(allIncidents);
             }
-
             @Override
-            public void onError(Exception e) {
-                if (isAdded() && getContext() != null) {
-                    Toast.makeText(getContext(), "Erreur chargement carte", Toast.LENGTH_SHORT).show();
-                }
-            }
+            public void onError(Exception e) {}
         });
     }
 
     private void filterMarkers(String categoryName) {
         List<Incident> filteredList = new ArrayList<>();
-        if (allIncidents != null) {
-            for (Incident inc : allIncidents) {
-                if (inc.getNomCategorie() != null &&
-                        inc.getNomCategorie().toLowerCase().contains(categoryName.toLowerCase())) {
-                    filteredList.add(inc);
-                }
+        for (Incident inc : allIncidents) {
+            if (inc.getNomCategorie() != null && inc.getNomCategorie().equalsIgnoreCase(categoryName)) {
+                filteredList.add(inc);
             }
         }
         updateMapMarkers(filteredList);
     }
 
     private void updateMapMarkers(List<Incident> incidentsToDisplay) {
-        if (googleMap == null || incidentsToDisplay == null || clusterManager == null) return;
-
+        if (googleMap == null || clusterManager == null) return;
         clusterManager.clearItems();
-
         for (Incident inc : incidentsToDisplay) {
-            // Filtrage basique des coordonnées invalides (0,0)
-            if (Math.abs(inc.getLatitude()) < 0.0001 && Math.abs(inc.getLongitude()) < 0.0001) {
-                continue;
-            }
-            clusterManager.addItem(inc);
+            if (Math.abs(inc.getLatitude()) > 0.001) clusterManager.addItem(inc);
         }
         clusterManager.cluster();
     }
 
     public void enableUserLocation() {
-        if (getContext() == null) return;
-        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-            if (googleMap != null) {
-                googleMap.setMyLocationEnabled(true);
-                googleMap.getUiSettings().setMyLocationButtonEnabled(true);
-            }
+            if (googleMap != null) googleMap.setMyLocationEnabled(true);
         }
     }
 }

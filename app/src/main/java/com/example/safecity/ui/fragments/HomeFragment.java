@@ -48,6 +48,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * Fragment principal affichant le flux d'incidents signalés.
+ * Gère le filtrage par recherche textuelle et par catégorie.
+ */
 public class HomeFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
     private RecyclerView recyclerView;
@@ -67,7 +71,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setHasOptionsMenu(true); // Indique que le fragment a un menu
+        setHasOptionsMenu(true);
     }
 
     @Nullable
@@ -97,10 +101,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         adapter = new IncidentAdapter(getContext(), new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
-
-        if (searchQuery != null) {
-            Toast.makeText(getContext(), "Recherche : " + searchQuery, Toast.LENGTH_SHORT).show();
-        }
 
         // --- AUTH & ROLES ---
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
@@ -135,7 +135,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery));
     }
 
-    // --- CONFIGURATION SEARCHVIEW ---
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_home, menu);
@@ -266,8 +265,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String[] options = {"📊 Voir Tableau de Bord", "📢 Diffuser Alerte Officielle"};
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Administration")
-                .setItems(options, (dialog, Bavaria) -> {
-                    if (Bavaria == 0) showStatisticsDialog();
+                .setItems(options, (dialog, Bayern) -> {
+                    if (Bayern == 0) showStatisticsDialog();
                     else showSendAlertDialog();
                 })
                 .show();
@@ -435,16 +434,11 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         new MaterialAlertDialogBuilder(requireContext()).setTitle("Tableau de Bord").setMessage(msg).setPositiveButton("OK", null).show();
     }
 
-    // --- CORRECTION : AJOUT DE LA MÉTHODE MANQUANTE ---
+    // --- CORRECTION : OUVERTURE DES COMMENTAIRES EN BOTTOMSHEET ---
     @Override
     public void onCommentClick(Incident incident) {
-        // Logique pour ouvrir les commentaires
-        Toast.makeText(getContext(), "Ouverture des commentaires : " + incident.getDescription(), Toast.LENGTH_SHORT).show();
-
-        /* Si vous avez un CommentFragment :
-        getParentFragmentManager().beginTransaction()
-                .replace(R.id.nav_host_fragment, CommentFragment.newInstance(incident.getId()))
-                .addToBackStack(null).commit();
-        */
+        // On utilise maintenant le BottomSheetDialogFragment au lieu d'une transaction de fragment classique
+        CommentFragment bottomSheet = CommentFragment.newInstance(incident.getId());
+        bottomSheet.show(getParentFragmentManager(), "CommentBottomSheet");
     }
 }

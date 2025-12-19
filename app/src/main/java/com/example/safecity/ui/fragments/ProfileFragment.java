@@ -24,7 +24,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.signature.ObjectKey;
 import com.example.safecity.LoginActivity;
+import com.example.safecity.MainActivity;
 import com.example.safecity.R;
 import com.example.safecity.model.Incident;
 import com.example.safecity.model.Utilisateur;
@@ -37,7 +40,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.WriteBatch;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
@@ -45,13 +47,17 @@ import com.google.firebase.storage.StorageReference;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Fragment de profil permettant à l'utilisateur de gérer ses informations,
+ * de voir ses signalements et de mettre à jour son identité visuelle.
+ */
 public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
     // --- VUES ---
     private ImageView imgProfile;
     private TextView tvName, tvEmail, tvScore;
     private Button btnLogout;
-    private FloatingActionButton btnEditName;
+    private FloatingActionButton btnEditProfile;
     private RecyclerView recyclerView;
 
     // --- LOGIQUE ---
@@ -66,9 +72,11 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Initialisation du sélecteur de galerie
         galleryLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
             if (uri != null) {
-                if (imgProfile != null) imgProfile.setImageURI(uri);
+                // On affiche immédiatement l'image locale pour un feedback rapide
+                Glide.with(this).load(uri).circleCrop().into(imgProfile);
                 uploadProfileImage(uri);
             }
         });
@@ -89,7 +97,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         tvEmail = view.findViewById(R.id.tv_profile_email);
         tvScore = view.findViewById(R.id.tv_profile_score);
         btnLogout = view.findViewById(R.id.btn_logout);
-        btnEditName = view.findViewById(R.id.btn_edit_profile);
+        btnEditProfile = view.findViewById(R.id.btn_edit_profile);
 
         recyclerView = view.findViewById(R.id.recycler_profile_incidents);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -100,10 +108,14 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         auth = FirebaseAuth.getInstance();
         firestoreRepo = new FirestoreRepository();
 
+        // TOUCHER L'IMAGE POUR CHANGER
         imgProfile.setOnClickListener(v -> galleryLauncher.launch("image/*"));
 
-        if (btnEditName != null) {
-            btnEditName.setOnClickListener(v -> showEditNameDialog());
+        // TOUCHER LE NOM POUR CHANGER AUSSI (Plus intuitif)
+        tvName.setOnClickListener(v -> showEditNameDialog());
+
+        if (btnEditProfile != null) {
+            btnEditProfile.setOnClickListener(v -> showEditNameDialog());
         }
 
         btnLogout.setOnClickListener(v -> {
@@ -129,37 +141,25 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
-        String name = user.getDisplayName();
-        String email = user.getEmail();
-        Uri photoUrl = user.getPhotoUrl();
-
-        tvName.setText((name != null && !name.isEmpty()) ? name : "Utilisateur");
-        tvEmail.setText((email != null) ? email : "Email masqué");
-
-        if (getContext() != null) {
-            Glide.with(this)
-                    .load(photoUrl)
-                    .placeholder(R.drawable.ic_profile)
-                    .circleCrop()
-                    .into(imgProfile);
-        }
+        tvEmail.setText(user.getEmail());
 
         firestoreRepo.getUser(user.getUid(), new FirestoreRepository.OnUserLoadedListener() {
             @Override
             public void onUserLoaded(Utilisateur utilisateur) {
                 if (isAdded() && utilisateur != null) {
+                    tvName.setText(utilisateur.getNom() != null ? utilisateur.getNom() : "Citoyen");
                     tvScore.setText("Score : " + utilisateur.getScore() + " pts (" + utilisateur.getGrade() + ")");
 
-                    if (utilisateur.getNom() != null && !utilisateur.getNom().isEmpty()) {
-                        tvName.setText(utilisateur.getNom());
-                    }
+                    // Correction Cache Glide : On utilise une signature (timestamp) pour forcer le refresh
+                    Glide.with(ProfileFragment.this)
+                            .load(utilisateur.getPhotoProfilUrl())
+                            .placeholder(R.drawable.ic_profile)
+                            .signature(new ObjectKey(System.currentTimeMillis())) // Force le rafraîchissement
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .skipMemoryCache(true)
+                            .circleCrop()
+                            .into(imgProfile);
 
-                    if (photoUrl == null && utilisateur.getPhotoProfilUrl() != null) {
-                        Glide.with(ProfileFragment.this)
-                                .load(utilisateur.getPhotoProfilUrl())
-                                .circleCrop()
-                                .into(imgProfile);
-                    }
                     adapter.setCurrentUser(user.getUid(), utilisateur.getIdRole());
                 }
             }
@@ -184,7 +184,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         StorageReference storageRef = FirebaseStorage.getInstance().getReference()
                 .child("profile_images/" + userId + ".jpg");
 
-        Toast.makeText(getContext(), "Mise à jour de la photo...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Téléchargement de la photo...", Toast.LENGTH_SHORT).show();
 
         storageRef.putFile(imageUri)
                 .addOnSuccessListener(taskSnapshot -> {
@@ -204,15 +204,20 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         FirebaseFirestore.getInstance().collection("utilisateurs").document(user.getUid())
                 .update("photoProfilUrl", urlString)
                 .addOnSuccessListener(aVoid -> {
+                    // On met à jour le profil Firebase Auth avec l'URL publique, pas l'URI locale
                     UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
-                            .setPhotoUri(uriObj)
+                            .setPhotoUri(Uri.parse(urlString))
                             .build();
 
-                    user.updateProfile(profileUpdates).addOnCompleteListener(task -> {});
-                    updateAllUserIncidents(user.getUid(), urlString);
+                    user.updateProfile(profileUpdates).addOnCompleteListener(task -> {
+                        updateAllUserIncidents(user.getUid(), urlString);
+                    });
                 });
     }
 
+    /**
+     * Met à jour rétroactivement l'avatar sur tous les signalements de l'utilisateur.
+     */
     private void updateAllUserIncidents(String userId, String newPhotoUrl) {
         FirebaseFirestore firestore = FirebaseFirestore.getInstance();
         firestore.collection("incidents")
@@ -220,20 +225,19 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     if (queryDocumentSnapshots.isEmpty()) {
-                        if (isAdded()) Toast.makeText(getContext(), "Photo de profil mise à jour !", Toast.LENGTH_SHORT).show();
+                        loadProfileData();
                         return;
                     }
+
                     WriteBatch batch = firestore.batch();
                     for (DocumentSnapshot doc : queryDocumentSnapshots) {
                         batch.update(doc.getReference(), "auteurPhotoUrl", newPhotoUrl);
                     }
                     batch.commit().addOnSuccessListener(aVoid -> {
                         if (isAdded()) {
-                            Toast.makeText(getContext(), "Profil et " + queryDocumentSnapshots.size() + " posts mis à jour !", Toast.LENGTH_LONG).show();
+                            Toast.makeText(getContext(), "Profil mis à jour !", Toast.LENGTH_SHORT).show();
                             loadProfileData();
                         }
-                    }).addOnFailureListener(e -> {
-                        if (isAdded()) Toast.makeText(getContext(), "Profil OK (Erreur synchro posts)", Toast.LENGTH_SHORT).show();
                     });
                 });
     }
@@ -243,9 +247,9 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
         FrameLayout container = new FrameLayout(getContext());
         final EditText input = new EditText(getContext());
-        input.setHint("Nouveau nom");
-        String current = tvName.getText().toString();
-        if (!current.equals("Utilisateur")) input.setText(current);
+        input.setHint("Entrez votre nom");
+        input.setText(tvName.getText().toString());
+        input.setSelection(input.getText().length()); // Place le curseur à la fin
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -259,11 +263,13 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         container.addView(input);
 
         new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Modifier le nom")
+                .setTitle("Modifier mon nom")
                 .setView(container)
-                .setPositiveButton("Sauvegarder", (dialog, which) -> {
+                .setPositiveButton("Enregistrer", (dialog, which) -> {
                     String newName = input.getText().toString().trim();
-                    if (!newName.isEmpty()) updateProfileName(newName);
+                    if (!newName.isEmpty()) {
+                        updateProfileName(newName);
+                    }
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -273,16 +279,28 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
+        Toast.makeText(getContext(), "Modification du nom...", Toast.LENGTH_SHORT).show();
+
         FirebaseFirestore.getInstance().collection("utilisateurs").document(user.getUid())
                 .update("nom", newName)
                 .addOnSuccessListener(aVoid -> {
-                    UserProfileChangeRequest updates = new UserProfileChangeRequest.Builder().setDisplayName(newName).build();
-                    user.updateProfile(updates);
-                    tvName.setText(newName);
-                    updateNameInAllIncidents(user.getUid(), newName);
+                    UserProfileChangeRequest updates = new UserProfileChangeRequest.Builder()
+                            .setDisplayName(newName)
+                            .build();
+
+                    user.updateProfile(updates).addOnCompleteListener(task -> {
+                        tvName.setText(newName);
+                        updateNameInAllIncidents(user.getUid(), newName);
+                    });
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
     }
 
+    /**
+     * Met à jour rétroactivement le nom de l'auteur sur tous ses signalements.
+     */
     private void updateNameInAllIncidents(String userId, String newName) {
         FirebaseFirestore firestore = FirebaseFirestore.getInstance();
         firestore.collection("incidents")
@@ -290,27 +308,28 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
                     if (querySnapshot.isEmpty()) {
-                        if (isAdded()) Toast.makeText(getContext(), "Nom modifié.", Toast.LENGTH_SHORT).show();
+                        loadProfileData();
                         return;
                     }
+
                     WriteBatch batch = firestore.batch();
                     for (DocumentSnapshot doc : querySnapshot) {
                         batch.update(doc.getReference(), "nomUtilisateur", newName);
                     }
                     batch.commit().addOnSuccessListener(aVoid -> {
                         if (isAdded()) {
-                            Toast.makeText(getContext(), "Nom et anciens posts mis à jour !", Toast.LENGTH_LONG).show();
+                            Toast.makeText(getContext(), "Nom actualisé partout !", Toast.LENGTH_SHORT).show();
                             loadProfileData();
                         }
-                    }).addOnFailureListener(e -> {
-                        if (isAdded()) Toast.makeText(getContext(), "Nom modifié (Erreur synchro posts)", Toast.LENGTH_SHORT).show();
                     });
                 });
     }
 
     @Override
     public void onMapClick(Incident incident) {
-        // Logique pour ouvrir la carte sur cet incident
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).navigateToMapAndFocus(incident.getLatitude(), incident.getLongitude());
+        }
     }
 
     @Override
@@ -324,17 +343,17 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     public void onDeleteClick(Incident incident) {
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Supprimer ?")
-                .setMessage("Voulez-vous vraiment supprimer ce signalement ?")
-                .setPositiveButton("Oui", (d, w) -> firestoreRepo.deleteIncident(incident.getId(), incident.getPhotoUrl(), new FirestoreRepository.OnFirestoreTaskComplete() {
+                .setMessage("Voulez-vous supprimer ce signalement ? Cette action est irréversible.")
+                .setPositiveButton("Supprimer", (d, w) -> firestoreRepo.deleteIncident(incident.getId(), incident.getPhotoUrl(), new FirestoreRepository.OnFirestoreTaskComplete() {
                     @Override public void onSuccess() {
                         Toast.makeText(getContext(), "Supprimé.", Toast.LENGTH_SHORT).show();
                         loadProfileData();
                     }
                     @Override public void onError(Exception e) {
-                        Toast.makeText(getContext(), "Erreur lors de la suppression", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Erreur suppression.", Toast.LENGTH_SHORT).show();
                     }
                 }))
-                .setNegativeButton("Non", null).show();
+                .setNegativeButton("Annuler", null).show();
     }
 
     @Override
@@ -343,7 +362,6 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     }
 
     private void showFullImageDialog(String imageUrl) {
-        if (getContext() == null) return;
         Dialog dialog = new Dialog(getContext(), android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.setContentView(R.layout.dialog_fullscreen_image);
         ImageView img = dialog.findViewById(R.id.img_full_screen);
@@ -355,20 +373,13 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
 
     @Override
     public void onValidateClick(Incident incident) {
-        // Logique de validation (pour admin/autorité)
+        // Réservé aux autorités
     }
 
-    // --- CORRECTION : AJOUT DE LA MÉTHODE MANQUANTE ---
     @Override
     public void onCommentClick(Incident incident) {
-        // Logique pour ouvrir les commentaires
-        // Exemple : navigation vers un fragment de commentaires
-        Toast.makeText(getContext(), "Ouverture des commentaires pour : " + incident.getDescription(), Toast.LENGTH_SHORT).show();
-
-        /* Si vous avez un fragment de commentaires, décommentez ceci :
-        getParentFragmentManager().beginTransaction()
-                .replace(R.id.nav_host_fragment, CommentFragment.newInstance(incident.getId()))
-                .addToBackStack(null).commit();
-        */
+        // Ouverture du BottomSheet de commentaires
+        CommentFragment bottomSheet = CommentFragment.newInstance(incident.getId());
+        bottomSheet.show(getParentFragmentManager(), "CommentBottomSheet");
     }
 }

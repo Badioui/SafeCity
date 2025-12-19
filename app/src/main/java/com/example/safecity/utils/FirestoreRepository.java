@@ -1,28 +1,37 @@
 package com.example.safecity.utils;
 
 import com.example.safecity.model.Categorie;
+import com.example.safecity.model.Comment;
 import com.example.safecity.model.Incident;
-// IMPORT AJOUTÉ
 import com.example.safecity.model.NotificationApp;
 import com.example.safecity.model.Role;
 import com.example.safecity.model.Utilisateur;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.storage.FirebaseStorage;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Repository central pour la gestion des données Firestore de l'application SafeCity.
+ * Gère les incidents, les utilisateurs, les notifications et les commentaires.
+ */
 public class FirestoreRepository {
 
     private final FirebaseFirestore db;
 
     public FirestoreRepository() {
-        db = FirebaseFirestore.getInstance();
+        this.db = FirebaseFirestore.getInstance();
     }
 
-    // --- INTERFACES DE CALLBACK ---
+    // ==================================================================
+    // INTERFACES DE CALLBACK (LISTENERS)
+    // ==================================================================
 
     public interface OnFirestoreTaskComplete {
         void onSuccess();
@@ -39,7 +48,6 @@ public class FirestoreRepository {
         void onError(Exception e);
     }
 
-    // AJOUT : Interface pour les notifications
     public interface OnNotificationsLoadedListener {
         void onNotificationsLoaded(List<NotificationApp> notifications);
         void onError(Exception e);
@@ -60,11 +68,18 @@ public class FirestoreRepository {
         void onError(Exception e);
     }
 
+    public interface OnCommentsLoadedListener {
+        void onCommentsLoaded(List<Comment> comments);
+        void onError(Exception e);
+    }
+
     // ==================================================================
-    // MÉTHODES D'ÉCRITURE (CREATE / UPDATE)
+    // MÉTHODES D'ÉCRITURE (INCIDENTS ET NOTIFICATIONS)
     // ==================================================================
 
-    // 1. AJOUTER INCIDENT (Nouveau)
+    /**
+     * Ajoute un nouvel incident et enregistre l'ID généré dans le document.
+     */
     public void addIncident(Incident incident, OnFirestoreTaskComplete listener) {
         db.collection("incidents")
                 .add(incident)
@@ -77,7 +92,9 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 2. METTRE À JOUR STATUT (Validation Admin/Autorité)
+    /**
+     * Met à jour le statut d'un incident.
+     */
     public void updateIncidentStatus(String incidentId, String newStatus, OnFirestoreTaskComplete listener) {
         db.collection("incidents").document(incidentId)
                 .update("statut", newStatus)
@@ -85,7 +102,9 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 3. METTRE À JOUR LES DÉTAILS (Modification par l'utilisateur)
+    /**
+     * Met à jour l'intégralité des détails d'un incident.
+     */
     public void updateIncidentDetails(Incident incident, OnFirestoreTaskComplete listener) {
         if (incident.getId() == null) {
             listener.onError(new Exception("ID manquant pour la mise à jour"));
@@ -97,7 +116,9 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 4. INCRÉMENTER SCORE (Gamification)
+    /**
+     * Incrémente le score de l'utilisateur.
+     */
     public void incrementUserScore(String userId, int points) {
         if (userId == null) return;
         db.collection("users").document(userId)
@@ -105,25 +126,78 @@ public class FirestoreRepository {
                 .addOnFailureListener(e -> { });
     }
 
-    // 5. AJOUTER ALERTE OFFICIELLE (Pour déclencher la Cloud Function)
+    /**
+     * Ajoute une alerte officielle.
+     */
     public void addOfficialAlert(NotificationApp alert, OnFirestoreTaskComplete listener) {
-        db.collection("official_alerts") // Nouvelle collection dédiée pour les alertes officielles
+        db.collection("official_alerts")
                 .add(alert)
                 .addOnSuccessListener(aVoid -> listener.onSuccess())
                 .addOnFailureListener(listener::onError);
     }
 
-    // AJOUT : AJOUTER UNE NOTIFICATION (Système)
+    /**
+     * Ajoute une notification au système.
+     */
     public void addNotification(NotificationApp notification) {
-        // Utilisé pour l'historique local ou les notifications standard
         db.collection("notifications").add(notification);
+    }
+
+    // ==================================================================
+    // MÉTHODES POUR LES COMMENTAIRES (AVEC TRANSACTION)
+    // ==================================================================
+
+    /**
+     * Ajoute un commentaire et incrémente atomiquement le compteur sur l'incident.
+     */
+    public void addComment(Comment comment, OnFirestoreTaskComplete listener) {
+        DocumentReference incidentRef = db.collection("incidents").document(comment.getIdIncident());
+        DocumentReference commentRef = incidentRef.collection("comments").document();
+
+        db.runTransaction(transaction -> {
+                    // 1. Incrémenter le compteur sur l'incident parent
+                    transaction.update(incidentRef, "commentsCount", FieldValue.increment(1));
+
+                    // 2. Ajouter le commentaire dans la sous-collection
+                    transaction.set(commentRef, comment);
+
+                    return null;
+                }).addOnSuccessListener(aVoid -> listener.onSuccess())
+                .addOnFailureListener(listener::onError);
+    }
+
+    /**
+     * Récupère les commentaires d'un incident en temps réel.
+     */
+    public ListenerRegistration getCommentsRealtime(String incidentId, OnCommentsLoadedListener listener) {
+        return db.collection("incidents").document(incidentId).collection("comments")
+                .orderBy("datePublication", Query.Direction.ASCENDING)
+                .addSnapshotListener((value, error) -> {
+                    if (error != null) {
+                        listener.onError(error);
+                        return;
+                    }
+                    List<Comment> comments = new ArrayList<>();
+                    if (value != null) {
+                        for (DocumentSnapshot doc : value.getDocuments()) {
+                            Comment c = doc.toObject(Comment.class);
+                            if (c != null) {
+                                c.setId(doc.getId());
+                                comments.add(c);
+                            }
+                        }
+                    }
+                    listener.onCommentsLoaded(comments);
+                });
     }
 
     // ==================================================================
     // MÉTHODES DE LECTURE (READ)
     // ==================================================================
 
-    // 6. LIRE TOUS LES INCIDENTS (Temps réel)
+    /**
+     * Récupère tous les incidents en temps réel avec extraction de l'ID.
+     */
     public ListenerRegistration getIncidentsRealtime(OnDataLoadListener listener) {
         return db.collection("incidents")
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
@@ -133,31 +207,52 @@ public class FirestoreRepository {
                         listener.onError(e);
                         return;
                     }
+                    List<Incident> incidents = new ArrayList<>();
                     if (snapshots != null) {
-                        listener.onIncidentsLoaded(snapshots.toObjects(Incident.class));
+                        for (DocumentSnapshot doc : snapshots.getDocuments()) {
+                            Incident incident = doc.toObject(Incident.class);
+                            if (incident != null) {
+                                incident.setId(doc.getId());
+                                incidents.add(incident);
+                            }
+                        }
                     }
+                    listener.onIncidentsLoaded(incidents);
                 });
     }
 
-    // 7. LIRE MES INCIDENTS
+    /**
+     * Récupère les incidents d'un utilisateur spécifique.
+     */
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
         db.collection("incidents")
                 .whereEqualTo("idUtilisateur", userId)
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
-                    List<Incident> list = queryDocumentSnapshots.toObjects(Incident.class);
+                    List<Incident> list = new ArrayList<>();
+                    for (DocumentSnapshot doc : queryDocumentSnapshots.getDocuments()) {
+                        Incident incident = doc.toObject(Incident.class);
+                        if (incident != null) {
+                            incident.setId(doc.getId());
+                            list.add(incident);
+                        }
+                    }
                     listener.onIncidentsLoaded(list);
                 })
                 .addOnFailureListener(listener::onError);
     }
 
-    // 8. RÉCUPÉRER UN SEUL INCIDENT
+    /**
+     * Récupère un incident spécifique par son ID.
+     */
     public void getIncident(String incidentId, OnIncidentLoadedListener listener) {
         db.collection("incidents").document(incidentId).get()
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
-                        listener.onIncidentLoaded(doc.toObject(Incident.class));
+                        Incident incident = doc.toObject(Incident.class);
+                        if (incident != null) incident.setId(doc.getId());
+                        listener.onIncidentLoaded(incident);
                     } else {
                         listener.onError(new Exception("Incident introuvable"));
                     }
@@ -165,12 +260,19 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 9. RÉCUPÉRER UN UTILISATEUR
+    /**
+     * Récupère les informations d'un utilisateur.
+     */
     public void getUser(String uid, OnUserLoadedListener listener) {
         db.collection("users").document(uid).get()
                 .addOnSuccessListener(documentSnapshot -> {
                     if (documentSnapshot.exists()) {
-                        listener.onUserLoaded(documentSnapshot.toObject(Utilisateur.class));
+                        Utilisateur user = documentSnapshot.toObject(Utilisateur.class);
+                        if (user != null) {
+                            // CORRECTION : Utilisation de setId au lieu de setUid
+                            user.setId(documentSnapshot.getId());
+                        }
+                        listener.onUserLoaded(user);
                     } else {
                         listener.onError(new Exception("Utilisateur introuvable"));
                     }
@@ -178,7 +280,9 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 10. RÉCUPÉRER LES NOTIFICATIONS
+    /**
+     * Récupère les dernières notifications.
+     */
     public void getNotifications(OnNotificationsLoadedListener listener) {
         db.collection("notifications")
                 .orderBy("date", Query.Direction.DESCENDING)
@@ -193,10 +297,12 @@ public class FirestoreRepository {
     }
 
     // ==================================================================
-    // SUPPRESSION & UTILITAIRES
+    // SUPPRESSION ET RÉFÉRENTIELS
     // ==================================================================
 
-    // 11. SUPPRIMER INCIDENT
+    /**
+     * Supprime un incident et son média associé.
+     */
     public void deleteIncident(String incidentId, String photoUrl, OnFirestoreTaskComplete listener) {
         if (incidentId == null || incidentId.isEmpty()) {
             listener.onError(new Exception("ID invalide"));
@@ -225,13 +331,18 @@ public class FirestoreRepository {
                 .addOnFailureListener(listener::onError);
     }
 
-    // 12. ROLES ET CATEGORIES
+    /**
+     * Charge les rôles.
+     */
     public void getRoles(OnRolesLoadedListener listener) {
         db.collection("roles").get().addOnSuccessListener(q -> {
             if (q != null) listener.onRolesLoaded(q.toObjects(Role.class));
         }).addOnFailureListener(listener::onError);
     }
 
+    /**
+     * Charge les catégories.
+     */
     public void getCategories(OnCategoriesLoadedListener listener) {
         db.collection("categories").orderBy("nomCategorie").get().addOnSuccessListener(q -> {
             if (q != null) listener.onCategoriesLoaded(q.toObjects(Categorie.class));

@@ -3,11 +3,18 @@ package com.example.safecity.model;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.clustering.ClusterItem;
 import com.google.firebase.firestore.Exclude;
+import com.google.firebase.firestore.IgnoreExtraProperties;
 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * Modèle représentant un incident signalé dans SafeCity.
+ * Implémente ClusterItem pour permettre le regroupement de marqueurs sur la carte.
+ * Utilise @IgnoreExtraProperties pour garantir la compatibilité ascendante de la base de données.
+ */
+@IgnoreExtraProperties
 public class Incident implements ClusterItem {
 
     // --- Constantes de statut ---
@@ -15,10 +22,10 @@ public class Incident implements ClusterItem {
     public static final String STATUT_EN_COURS = "En cours";
     public static final String STATUT_TRAITE = "Traité";
 
-    // --- Champs principaux (Stockés dans Firestore) ---
+    // --- Champs persistés dans Firestore ---
     private String id;
     private String photoUrl;
-    private String videoUrl; // Support Vidéo V2
+    private String videoUrl;
     private String description;
     private String idCategorie;
     private double latitude;
@@ -27,26 +34,30 @@ public class Incident implements ClusterItem {
     private String statut;
     private String idUtilisateur;
 
-    // --- NOUVEAUX CHAMPS V2.5 ---
-    private String auteurPhotoUrl; // Avatar de l'auteur
-    private int likesCount;        // Nombre de J'aime
-    private List<String> likedBy;  // Liste des ID utilisateurs qui ont liké
-    private int commentsCount;     // AJOUT : Nombre de commentaires
+    // --- Champs Sociaux & Engagement (V2.5) ---
+    private String auteurPhotoUrl; // Stocke l'URL de l'avatar au moment du post (performance)
+    private int likesCount;
+    private List<String> likedBy;  // Liste des UIDs pour vérifier l'état du bouton Like
+    private int commentsCount;
 
-    // --- Champs dénormalisés (Pour l'affichage rapide) ---
+    // --- Champs Dénormalisés (Performance UI) ---
+    // Ces champs évitent de faire des requêtes supplémentaires pour récupérer le nom du user ou de la catégorie
     private String nomCategorie;
     private String nomUtilisateur;
 
-    // --- Constructeur Vide (Requis par Firestore) ---
+    /**
+     * Constructeur vide requis pour la désérialisation Firebase Firestore.
+     */
     public Incident() {
-        // Valeurs par défaut
         this.statut = STATUT_NOUVEAU;
         this.likesCount = 0;
-        this.commentsCount = 0; // Init
+        this.commentsCount = 0;
         this.likedBy = new ArrayList<>();
     }
 
-    // --- Constructeur Standard ---
+    /**
+     * Constructeur standard pour les signalements de base.
+     */
     public Incident(String id, String photoUrl, String description,
                     String idCategorie, double latitude, double longitude,
                     Date dateSignalement, String statut, String idUtilisateur) {
@@ -59,13 +70,16 @@ public class Incident implements ClusterItem {
         this.dateSignalement = dateSignalement;
         this.statut = statut;
         this.idUtilisateur = idUtilisateur;
-        // Init compteurs
+
+        // Initialisation des compteurs sociaux
         this.likesCount = 0;
         this.commentsCount = 0;
         this.likedBy = new ArrayList<>();
     }
 
-    // --- Constructeur Complet (Avec Vidéo) ---
+    /**
+     * Constructeur complet incluant le support vidéo.
+     */
     public Incident(String id, String photoUrl, String videoUrl, String description,
                     String idCategorie, double latitude, double longitude,
                     Date dateSignalement, String statut, String idUtilisateur) {
@@ -73,7 +87,8 @@ public class Incident implements ClusterItem {
         this.videoUrl = videoUrl;
     }
 
-    // --- Getters / Setters ---
+    // --- Getters et Setters ---
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
@@ -110,20 +125,20 @@ public class Incident implements ClusterItem {
     public String getNomUtilisateur() { return nomUtilisateur; }
     public void setNomUtilisateur(String nomUtilisateur) { this.nomUtilisateur = nomUtilisateur; }
 
-    // --- Getters / Setters Nouveaux Champs ---
     public String getAuteurPhotoUrl() { return auteurPhotoUrl; }
     public void setAuteurPhotoUrl(String auteurPhotoUrl) { this.auteurPhotoUrl = auteurPhotoUrl; }
 
     public int getLikesCount() { return likesCount; }
     public void setLikesCount(int likesCount) { this.likesCount = likesCount; }
 
-    public int getCommentsCount() { return commentsCount; } // Getter Commentaire
-    public void setCommentsCount(int commentsCount) { this.commentsCount = commentsCount; } // Setter Commentaire
+    public int getCommentsCount() { return commentsCount; }
+    public void setCommentsCount(int commentsCount) { this.commentsCount = commentsCount; }
 
     public List<String> getLikedBy() { return likedBy; }
     public void setLikedBy(List<String> likedBy) { this.likedBy = likedBy; }
 
-    // --- Utilitaires ---
+    // --- Méthodes Utilitaires (Exclues de Firestore) ---
+
     @Exclude
     public boolean isTraite() {
         return STATUT_TRAITE.equalsIgnoreCase(statut);
@@ -135,33 +150,37 @@ public class Incident implements ClusterItem {
     }
 
     /**
-     * Vérifie si l'utilisateur donné a déjà liké cet incident.
-     * @param userId L'ID de l'utilisateur courant
-     * @return true si l'utilisateur a liké, false sinon
+     * Vérifie si un utilisateur spécifique a aimé cet incident.
+     * @param userId L'UID de l'utilisateur à vérifier.
+     * @return true si l'utilisateur est dans la liste likedBy.
      */
     @Exclude
     public boolean isLikedBy(String userId) {
         return likedBy != null && likedBy.contains(userId);
     }
 
-    @Override
-    public String toString() {
-        return "[" + statut + "] " + description;
-    }
+    // --- Implémentation de ClusterItem (Google Maps Utils) ---
 
-    // --- Implémentation de ClusterItem (Google Maps) ---
     @Override
+    @Exclude
     public LatLng getPosition() {
         return new LatLng(latitude, longitude);
     }
 
     @Override
+    @Exclude
     public String getTitle() {
         return nomCategorie != null ? nomCategorie : "Incident";
     }
 
     @Override
+    @Exclude
     public String getSnippet() {
         return description;
+    }
+
+    @Override
+    public String toString() {
+        return "[" + statut + "] " + (nomCategorie != null ? nomCategorie : "Sans catégorie") + " : " + description;
     }
 }

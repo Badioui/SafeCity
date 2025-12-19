@@ -12,25 +12,32 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
         <TextView
             android:id="@+id/tv_header"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Nouveau Signalement"
+            android:text="Signaler un incident"
             android:textColor="@color/black"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp"/>
+            android:textSize="26sp"
+            android:fontFamily="sans-serif-black"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Aidez-nous à rendre la ville plus sûre."
+            android:textColor="@color/light_text_secondary"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp"/>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            app:strokeColor="#E0E0E0"
-            app:strokeWidth="1dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp"
+            app:strokeWidth="0dp"
             android:backgroundTint="@android:color/white">
 
             <LinearLayout
@@ -38,10 +45,11 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Section Photo -->
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="200dp"
-                    android:background="#EEEEEE">
+                    android:layout_height="220dp"
+                    android:background="#F8F9FA">
 
                     <ImageView
                         android:id="@+id/img_photo_preview"
@@ -49,19 +57,24 @@
                         android:layout_height="match_parent"
                         android:scaleType="centerCrop"
                         android:src="@drawable/ic_incident_placeholder"
-                        android:padding="50dp"
-                        app:tint="@color/light_text_secondary" />
+                        android:padding="60dp"
+                        app:tint="#CBD5E0" />
 
-                    <ImageButton
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/gradient_overlay_bottom"/>
+
+                    <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/btn_capture_photo"
-                        android:layout_width="56dp"
-                        android:layout_height="56dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_gravity="bottom|end"
                         android:layout_margin="16dp"
-                        android:background="@drawable/status_new_bg"
                         android:src="@drawable/ic_camera"
+                        app:fabSize="normal"
+                        app:backgroundTint="@color/primary_color"
                         app:tint="@android:color/white"
-                        android:elevation="6dp"
                         android:contentDescription="Prendre photo"/>
                 </FrameLayout>
 
@@ -69,37 +82,38 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="20dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Type d'incident"
-                        android:textSize="14sp"
-                        android:textColor="#757575"/>
-
-                    <Spinner
-                        android:id="@+id/spinner_type_incident"
+                    <!-- Type d'incident (Dropdown modernisé) -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
-                        android:layout_height="50dp"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/status_new_bg"
-                        android:backgroundTint="#F5F5F5"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Description"
-                        android:textSize="14sp"
-                        android:textColor="#757575"
-                        android:layout_marginTop="16dp"/>
+                        android:hint="Type d'incident"
+                        app:startIconDrawable="@drawable/ic_category"
+                        android:layout_marginBottom="16dp">
 
+                        <AutoCompleteTextView
+                            android:id="@+id/spinner_type_incident"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Description -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/til_description"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        app:boxBackgroundMode="outline">
+                        android:hint="Description détaillée"
+                        app:startIconDrawable="@drawable/ic_description"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:counterEnabled="true"
+                        app:counterMaxLength="300"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/et_description"
@@ -107,60 +121,84 @@
                             android:layout_height="wrap_content"
                             android:minLines="3"
                             android:gravity="top"
-                            android:hint="Décrivez la situation..."
                             android:inputType="textMultiLine"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- CheckBox ajoutée ici pour désactiver le GPS -->
-                    <CheckBox
-                        android:id="@+id/cb_no_gps"
+                    <!-- Section Localisation -->
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Je ne veux pas partager ma position précise"
-                        android:layout_marginTop="8dp"/>
+                        android:text="Localisation"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="16dp"
+                        android:textColor="@color/black"/>
 
-                    <LinearLayout
+                    <com.google.android.material.card.MaterialCardView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
                         android:layout_marginTop="8dp"
-                        android:background="#F0F0F0"
-                        android:padding="8dp">
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#F0F0F0"
+                        app:strokeWidth="1dp"
+                        android:backgroundTint="#FAFAFA">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_map"
-                            app:tint="#2196F3"/>
-
-                        <TextView
-                            android:id="@+id/tv_gps_location"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:text="Recherche GPS..."
-                            android:textColor="#424242"
-                            android:textSize="14sp"/>
-                    </LinearLayout>
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:padding="12dp">
+
+                            <ImageView
+                                android:id="@+id/iv_gps_status"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:src="@drawable/ic_location_on"
+                                app:tint="#9E9E9E"/>
+
+                            <TextView
+                                android:id="@+id/tv_gps_location"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:text="Obtention de la position..."
+                                android:textColor="#616161"
+                                android:textSize="13sp"/>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/cb_no_gps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Signaler de manière anonyme (Position approximative)"
+                        android:textSize="12sp"
+                        android:textColor="#757575"
+                        android:layout_marginTop="8dp"/>
 
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_submit_incident"
             android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:layout_marginTop="24dp"
-            android:text="PUBLIER LE SIGNALEMENT"
+            android:layout_height="64dp"
+            android:layout_marginTop="32dp"
+            android:text="Envoyer le rapport"
             android:textSize="16sp"
-            android:textStyle="bold"
-            app:cornerRadius="8dp"/>
+            android:textAllCaps="false"
+            app:icon="@drawable/ic_send"
+            app:iconGravity="textStart"
+            app:cornerRadius="16dp"
+            android:elevation="4dp"/>
 
-        <View
+        <Space
             android:layout_width="match_parent"
-            android:layout_height="50dp"/>
+            android:layout_height="80dp"/>
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

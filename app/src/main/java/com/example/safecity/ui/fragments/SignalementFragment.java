@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
@@ -14,11 +15,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.ImageButton;
+import android.widget.AutoCompleteTextView;
 import android.widget.ImageView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,14 +26,17 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
 
 import com.bumptech.glide.Glide;
 import com.example.safecity.R;
 import com.example.safecity.model.Categorie;
 import com.example.safecity.model.Incident;
-import com.example.safecity.model.Utilisateur; // Import nécessaire
+import com.example.safecity.model.Utilisateur;
 import com.example.safecity.utils.AppExecutors;
 import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.utils.ImageUtils;
@@ -48,43 +49,48 @@ import com.google.firebase.storage.StorageReference;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * Fragment permettant de créer ou modifier un signalement d'incident.
+ * Gère la capture photo, la localisation GPS et l'envoi vers Firebase.
+ */
 public class SignalementFragment extends Fragment implements LocationHelper.LocationListener {
 
     private static final String ARG_INCIDENT_ID = "arg_incident_id";
 
-    // Constantes permissions
+    // Constantes de requêtes
     private static final int REQUEST_IMAGE_CAPTURE = 1;
     private static final int REQUEST_GALLERY_PICK = 2;
     private static final int PERM_CODE_CAMERA = 100;
     private static final int PERM_CODE_LOCATION = 101;
     private static final int PERM_CODE_GALLERY = 102;
 
-    // UI
+    // Éléments UI
     private TextInputEditText etDescription;
-    private Spinner spinnerType;
-    private Button btnSubmit;
-    private ImageButton btnCapturePhoto;
-    private ImageView imgPhotoPreview;
+    private AutoCompleteTextView autoCompleteType;
+    private MaterialButton btnSubmit;
+    private FloatingActionButton btnCapturePhoto;
+    private ImageView imgPhotoPreview, ivGpsStatus;
     private TextView tvGpsLocation, tvHeader;
-    private CheckBox cbNoGps;
+    private MaterialCheckBox cbNoGps;
 
-    // Logic
+    // Logique et données
     private FirestoreRepository firestoreRepo;
     private LocationHelper locationHelper;
     private Location lastKnownLocation;
     private String currentPhotoPath;
     private String finalPhotoPath;
 
-    // Data
     private String editingIncidentId = null;
     private Incident incidentToEdit;
+    private List<Categorie> mCategoriesList = new ArrayList<>();
+    private Categorie mSelectedCategory;
 
-    // NOUVEAU : Utilisateur chargé pour récupérer l'avatar
     private Utilisateur mCurrentUser;
 
     public static SignalementFragment newInstance(String incidentId) {
@@ -105,12 +111,14 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Initialisation des vues
         etDescription = view.findViewById(R.id.et_description);
-        spinnerType = view.findViewById(R.id.spinner_type_incident);
+        autoCompleteType = view.findViewById(R.id.spinner_type_incident);
         btnSubmit = view.findViewById(R.id.btn_submit_incident);
         btnCapturePhoto = view.findViewById(R.id.btn_capture_photo);
         imgPhotoPreview = view.findViewById(R.id.img_photo_preview);
         tvGpsLocation = view.findViewById(R.id.tv_gps_location);
+        ivGpsStatus = view.findViewById(R.id.iv_gps_status);
         tvHeader = view.findViewById(R.id.tv_header);
         cbNoGps = view.findViewById(R.id.cb_no_gps);
 
@@ -120,7 +128,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             editingIncidentId = getArguments().getString(ARG_INCIDENT_ID, null);
         }
 
-        // --- 1. CHARGEMENT UTILISATEUR (Pour l'avatar) ---
+        // Charger les infos de l'utilisateur pour l'avatar du signalement
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
         if (fbUser != null) {
             firestoreRepo.getUser(fbUser.getUid(), new FirestoreRepository.OnUserLoadedListener() {
@@ -129,14 +137,13 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     mCurrentUser = utilisateur;
                 }
                 @Override
-                public void onError(Exception e) {
-                    // En cas d'erreur, mCurrentUser restera null (pas grave, on a des fallbacks)
-                }
+                public void onError(Exception e) {}
             });
         }
 
         loadCategoriesAndInit();
 
+        // Listeners
         btnCapturePhoto.setOnClickListener(v -> showImageSourceDialog());
         btnSubmit.setOnClickListener(v -> prepareAndSaveIncident());
 
@@ -144,10 +151,15 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             if (isChecked) {
                 if (locationHelper != null) locationHelper.stopLocationUpdates();
                 if (incidentToEdit == null) lastKnownLocation = null;
-                tvGpsLocation.setText("Position manuelle ou conservée");
+                updateLocationUI(true, "Position approximative sélectionnée");
             } else {
                 checkLocationPermissionAndStart();
             }
+        });
+
+        autoCompleteType.setOnItemClickListener((parent, view1, position, id) -> {
+            mSelectedCategory = mCategoriesList.get(position);
+            autoCompleteType.setError(null);
         });
     }
 
@@ -158,10 +170,13 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 if (!isAdded() || getActivity() == null) return;
 
                 if (cats != null && !cats.isEmpty()) {
-                    ArrayAdapter<Categorie> adapter = new ArrayAdapter<>(getContext(),
-                            android.R.layout.simple_spinner_item, cats);
-                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                    spinnerType.setAdapter(adapter);
+                    mCategoriesList = cats;
+                    List<String> catNames = new ArrayList<>();
+                    for (Categorie c : cats) catNames.add(c.getNomCategorie());
+
+                    ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                            android.R.layout.simple_dropdown_item_1line, catNames);
+                    autoCompleteType.setAdapter(adapter);
                 }
 
                 if (editingIncidentId != null) {
@@ -185,23 +200,23 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 incidentToEdit = incident;
                 etDescription.setText(incident.getDescription());
 
-                if (incident.getNomCategorie() != null && spinnerType.getAdapter() != null) {
-                    for (int i = 0; i < spinnerType.getAdapter().getCount(); i++) {
-                        Categorie cat = (Categorie) spinnerType.getAdapter().getItem(i);
-                        if (cat.getNomCategorie().equals(incident.getNomCategorie())) {
-                            spinnerType.setSelection(i);
+                if (incident.getNomCategorie() != null) {
+                    autoCompleteType.setText(incident.getNomCategorie(), false);
+                    for (Categorie c : mCategoriesList) {
+                        if (c.getNomCategorie().equals(incident.getNomCategorie())) {
+                            mSelectedCategory = c;
                             break;
                         }
                     }
                 }
 
                 if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty()) {
-                    imgPhotoPreview.setVisibility(View.VISIBLE);
+                    imgPhotoPreview.setPadding(0, 0, 0, 0);
                     Glide.with(requireContext()).load(incident.getPhotoUrl()).into(imgPhotoPreview);
                 }
 
                 cbNoGps.setChecked(true);
-                tvGpsLocation.setText("Position originale conservée");
+                updateLocationUI(true, "Position originale conservée");
                 lastKnownLocation = new Location("Firestore");
                 lastKnownLocation.setLatitude(incident.getLatitude());
                 lastKnownLocation.setLongitude(incident.getLongitude());
@@ -209,14 +224,37 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
 
             @Override
             public void onError(Exception e) {
-                Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
     }
 
+    /**
+     * Met à jour visuellement le bandeau de localisation.
+     * Si ic_location_on ne compile pas, vérifiez que vous avez importé l'Asset Vector.
+     */
+    private void updateLocationUI(boolean isFixed, String message) {
+        if (!isAdded()) return;
+        tvGpsLocation.setText(message);
+        if (isFixed) {
+            tvGpsLocation.setTextColor(Color.BLACK);
+            // Si ic_location_on cause une erreur, assurez-vous de l'ajouter via New -> Vector Asset
+            ivGpsStatus.setImageResource(R.drawable.ic_location_on);
+            ivGpsStatus.setColorFilter(ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark));
+        } else {
+            tvGpsLocation.setTextColor(Color.GRAY);
+            ivGpsStatus.setImageResource(R.drawable.ic_location_on);
+            ivGpsStatus.setColorFilter(Color.GRAY);
+        }
+    }
+
     private void prepareAndSaveIncident() {
         String desc = etDescription.getText().toString().trim();
-        if (desc.isEmpty()) { etDescription.setError("Requis"); return; }
+        if (desc.isEmpty()) { etDescription.setError("Veuillez décrire la situation"); return; }
+        if (mSelectedCategory == null) {
+            autoCompleteType.setError("Sélectionnez un type d'incident");
+            return;
+        }
 
         Incident incident = (incidentToEdit != null) ? incidentToEdit : new Incident();
         incident.setDescription(desc);
@@ -226,23 +264,18 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             incident.setLongitude(lastKnownLocation.getLongitude());
         }
 
-        Categorie cat = (Categorie) spinnerType.getSelectedItem();
-        if (cat != null) {
-            incident.setIdCategorie(cat.getId());
-            incident.setNomCategorie(cat.getNomCategorie());
-        }
+        incident.setIdCategorie(mSelectedCategory.getId());
+        incident.setNomCategorie(mSelectedCategory.getNomCategorie());
 
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser == null) {
-            Toast.makeText(getContext(), "Connectez-vous", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Vous devez être connecté", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // --- GESTION AUTEUR & AVATAR (NOUVEAU) ---
-        if (editingIncidentId == null) { // Seulement à la création
+        if (editingIncidentId == null) {
             incident.setIdUtilisateur(currentUser.getUid());
 
-            // 1. Gestion du nom (Firestore > Auth > Anonyme)
             String userName = "Anonyme";
             if (mCurrentUser != null && mCurrentUser.getNom() != null && !mCurrentUser.getNom().isEmpty()) {
                 userName = mCurrentUser.getNom();
@@ -251,22 +284,19 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
             }
             incident.setNomUtilisateur(userName);
 
-            // 2. Gestion de l'avatar (Firestore > Auth > null)
             String userPhotoUrl = null;
             if (mCurrentUser != null && mCurrentUser.getPhotoProfilUrl() != null) {
                 userPhotoUrl = mCurrentUser.getPhotoProfilUrl();
             } else if (currentUser.getPhotoUrl() != null) {
                 userPhotoUrl = currentUser.getPhotoUrl().toString();
             }
-            incident.setAuteurPhotoUrl(userPhotoUrl); // Sauvegarde de l'avatar
+            incident.setAuteurPhotoUrl(userPhotoUrl);
 
             incident.setStatut(Incident.STATUT_NOUVEAU);
             incident.setDateSignalement(new Date());
         }
 
         btnSubmit.setEnabled(false);
-        Toast.makeText(getContext(), "Envoi en cours...", Toast.LENGTH_SHORT).show();
-
         if (finalPhotoPath != null) {
             uploadImageAndSave(incident);
         } else {
@@ -292,7 +322,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 .addOnFailureListener(e -> {
                     if (isAdded()) {
                         btnSubmit.setEnabled(true);
-                        Toast.makeText(getContext(), "Erreur upload image", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Erreur d'envoi de l'image", Toast.LENGTH_SHORT).show();
                         deleteTempFile(finalPhotoPath);
                     }
                 });
@@ -312,7 +342,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 @Override
                 public void onSuccess() {
                     if (isAdded()) {
-                        Toast.makeText(getContext(), "Modification enregistrée !", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Mis à jour avec succès !", Toast.LENGTH_SHORT).show();
                         getParentFragmentManager().popBackStack();
                     }
                 }
@@ -320,7 +350,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 public void onError(Exception e) {
                     if (isAdded()) {
                         btnSubmit.setEnabled(true);
-                        Toast.makeText(getContext(), "Erreur maj: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Erreur : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 }
             });
@@ -331,7 +361,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                     if (isAdded()) {
                         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                         if (user != null) firestoreRepo.incrementUserScore(user.getUid(), 10);
-                        Toast.makeText(getContext(), "Envoyé ! (+10 pts)", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Signalement envoyé ! (+10 pts)", Toast.LENGTH_LONG).show();
                         getParentFragmentManager().popBackStack();
                     }
                 }
@@ -339,7 +369,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                 public void onError(Exception e) {
                     if (isAdded()) {
                         btnSubmit.setEnabled(true);
-                        Toast.makeText(getContext(), "Erreur: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), "Erreur d'envoi : " + e.getMessage(), Toast.LENGTH_SHORT).show();
                     }
                 }
             });
@@ -350,7 +380,6 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == Activity.RESULT_OK) {
-            Toast.makeText(getContext(), "Traitement...", Toast.LENGTH_SHORT).show();
             AppExecutors.getInstance().diskIO().execute(() -> {
                 try {
                     File processedFile = null;
@@ -366,7 +395,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
                         finalPhotoPath = processedFile.getAbsolutePath();
                         AppExecutors.getInstance().mainThread().execute(() -> {
                             if (isAdded()) {
-                                imgPhotoPreview.setVisibility(View.VISIBLE);
+                                imgPhotoPreview.setPadding(0, 0, 0, 0);
                                 Glide.with(this).load(finalPhotoPath).centerCrop().into(imgPhotoPreview);
                             }
                         });
@@ -386,7 +415,7 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     }
 
     private void startGps() {
-        tvGpsLocation.setText("Recherche position...");
+        updateLocationUI(false, "Recherche de la position...");
         locationHelper = new LocationHelper(getContext());
         locationHelper.startLocationUpdates(this);
     }
@@ -395,15 +424,18 @@ public class SignalementFragment extends Fragment implements LocationHelper.Loca
     public void onLocationReceived(Location location) {
         if (cbNoGps.isChecked()) return;
         this.lastKnownLocation = location;
-        if (getContext() != null) {
-            tvGpsLocation.setText(String.format(Locale.getDefault(), "📍 GPS : %.4f, %.4f", location.getLatitude(), location.getLongitude()));
-            btnSubmit.setEnabled(true);
+        if (isAdded()) {
+            String locStr = String.format(Locale.getDefault(), "📍 Position : %.4f, %.4f",
+                    location.getLatitude(), location.getLongitude());
+            updateLocationUI(true, locStr);
         }
     }
 
     @Override
     public void onLocationError(String message) {
-        if (getContext() != null && !cbNoGps.isChecked()) tvGpsLocation.setText("⚠️ " + message);
+        if (isAdded() && !cbNoGps.isChecked()) {
+            updateLocationUI(false, "Signal GPS : " + message);
+        }
     }
 
     private void showImageSourceDialog() {
