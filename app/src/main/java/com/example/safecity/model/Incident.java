@@ -23,7 +23,6 @@ public class Incident implements ClusterItem {
     public static final String STATUT_TRAITE = "Traité";
 
     // --- Champs persistés dans Firestore ---
-    @DocumentId
     private String id;
     private String photoUrl;
     private String videoUrl;

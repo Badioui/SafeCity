@@ -9,7 +9,7 @@ import com.google.firebase.firestore.Exclude;
  */
 public class Utilisateur {
 
-    @DocumentId
+
     private String id;
 
     private String nom;
