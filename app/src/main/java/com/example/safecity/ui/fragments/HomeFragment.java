@@ -135,7 +135,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery));
     }
 
-    // --- CORRECTION 1 : CONFIGURATION SEARCHVIEW ---
+    // --- CONFIGURATION SEARCHVIEW ---
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_home, menu);
@@ -145,17 +145,13 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             SearchView searchView = (SearchView) searchItem.getActionView();
 
             if (searchView != null) {
-                // 1. Force l'affichage du bouton "Go" (soumettre)
                 searchView.setSubmitButtonEnabled(true);
-                // 2. Garde la barre ouverte (plus accessible)
                 searchView.setIconifiedByDefault(false);
-                // 3. Texte d'aide clair
                 searchView.setQueryHint("Rechercher un incident...");
 
-                // 4. Astuce pour s'assurer que l'icône "Go" est visible (couleur)
                 ImageView searchGoBtn = searchView.findViewById(androidx.appcompat.R.id.search_go_btn);
                 if (searchGoBtn != null) {
-                    searchGoBtn.setColorFilter(Color.BLACK); // Ou R.color.design_default_color_primary
+                    searchGoBtn.setColorFilter(Color.BLACK);
                 }
 
                 searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -163,7 +159,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                     public boolean onQueryTextSubmit(String query) {
                         searchQuery = query;
                         applyFilters(query);
-                        searchView.clearFocus(); // Ferme le clavier après validation
+                        searchView.clearFocus();
                         return true;
                     }
 
@@ -270,24 +266,21 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String[] options = {"📊 Voir Tableau de Bord", "📢 Diffuser Alerte Officielle"};
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Administration")
-                .setItems(options, (dialog, which) -> {
-                    if (which == 0) showStatisticsDialog();
+                .setItems(options, (dialog, Bavaria) -> {
+                    if (Bavaria == 0) showStatisticsDialog();
                     else showSendAlertDialog();
                 })
                 .show();
     }
 
-    // --- CORRECTION 2 : LAYOUT ALERTE OFFICIELLE (SCROLLVIEW) ---
     private void showSendAlertDialog() {
         if (getContext() == null) return;
 
-        // Container scrollable pour éviter que les boutons sortent de l'écran
         ScrollView scrollView = new ScrollView(getContext());
         scrollView.setFillViewport(true);
 
         LinearLayout layout = new LinearLayout(getContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        // Marges plus confortables
         int padding = (int) (24 * getResources().getDisplayMetrics().density);
         layout.setPadding(padding, padding/2, padding, padding);
 
@@ -326,9 +319,9 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         scrollView.addView(layout);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-                .setView(scrollView) // On passe le ScrollView au dialog
+                .setView(scrollView)
                 .setTitle("📢 Diffuser une Alerte")
-                .setPositiveButton("ENVOYER", null) // Le listener est défini après pour éviter la fermeture auto
+                .setPositiveButton("ENVOYER", null)
                 .setNegativeButton("Annuler", null)
                 .create();
 
@@ -440,5 +433,18 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         int success = (allIncidents.size() > 0) ? (nbTraites * 100 / allIncidents.size()) : 0;
         String msg = "📌 Total: " + allIncidents.size() + "\n✅ Résolus: " + success + "%\n\n🚗 Accidents: " + nbAccidents + "\n🏃 Vols: " + nbVols + "\n🔥 Incendies: " + nbIncendies;
         new MaterialAlertDialogBuilder(requireContext()).setTitle("Tableau de Bord").setMessage(msg).setPositiveButton("OK", null).show();
+    }
+
+    // --- CORRECTION : AJOUT DE LA MÉTHODE MANQUANTE ---
+    @Override
+    public void onCommentClick(Incident incident) {
+        // Logique pour ouvrir les commentaires
+        Toast.makeText(getContext(), "Ouverture des commentaires : " + incident.getDescription(), Toast.LENGTH_SHORT).show();
+
+        /* Si vous avez un CommentFragment :
+        getParentFragmentManager().beginTransaction()
+                .replace(R.id.nav_host_fragment, CommentFragment.newInstance(incident.getId()))
+                .addToBackStack(null).commit();
+        */
     }
 }

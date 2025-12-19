@@ -238,35 +238,29 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 });
     }
 
-    // --- CORRECTION 3 : DIALOG AVEC MARGES (EditText) ---
     private void showEditNameDialog() {
         if (getContext() == null) return;
 
-        // Container pour ajouter des marges (Padding) autour de l'EditText
         FrameLayout container = new FrameLayout(getContext());
-
         final EditText input = new EditText(getContext());
         input.setHint("Nouveau nom");
         String current = tvName.getText().toString();
         if (!current.equals("Utilisateur")) input.setText(current);
 
-        // Paramètres de layout pour l'EditText à l'intérieur du container
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
 
-        // 24dp de marge sur les côtés, 12dp en haut/bas
         int marginH = (int) (24 * getResources().getDisplayMetrics().density);
         int marginV = (int) (12 * getResources().getDisplayMetrics().density);
         params.setMargins(marginH, marginV, marginH, marginV);
         input.setLayoutParams(params);
-
         container.addView(input);
 
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Modifier le nom")
-                .setView(container) // On passe le container qui a les marges
+                .setView(container)
                 .setPositiveButton("Sauvegarder", (dialog, which) -> {
                     String newName = input.getText().toString().trim();
                     if (!newName.isEmpty()) updateProfileName(newName);
@@ -315,7 +309,9 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     }
 
     @Override
-    public void onMapClick(Incident incident) {}
+    public void onMapClick(Incident incident) {
+        // Logique pour ouvrir la carte sur cet incident
+    }
 
     @Override
     public void onEditClick(Incident incident) {
@@ -328,12 +324,15 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     public void onDeleteClick(Incident incident) {
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Supprimer ?")
+                .setMessage("Voulez-vous vraiment supprimer ce signalement ?")
                 .setPositiveButton("Oui", (d, w) -> firestoreRepo.deleteIncident(incident.getId(), incident.getPhotoUrl(), new FirestoreRepository.OnFirestoreTaskComplete() {
                     @Override public void onSuccess() {
                         Toast.makeText(getContext(), "Supprimé.", Toast.LENGTH_SHORT).show();
                         loadProfileData();
                     }
-                    @Override public void onError(Exception e) {}
+                    @Override public void onError(Exception e) {
+                        Toast.makeText(getContext(), "Erreur lors de la suppression", Toast.LENGTH_SHORT).show();
+                    }
                 }))
                 .setNegativeButton("Non", null).show();
     }
@@ -355,5 +354,21 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     }
 
     @Override
-    public void onValidateClick(Incident incident) {}
+    public void onValidateClick(Incident incident) {
+        // Logique de validation (pour admin/autorité)
+    }
+
+    // --- CORRECTION : AJOUT DE LA MÉTHODE MANQUANTE ---
+    @Override
+    public void onCommentClick(Incident incident) {
+        // Logique pour ouvrir les commentaires
+        // Exemple : navigation vers un fragment de commentaires
+        Toast.makeText(getContext(), "Ouverture des commentaires pour : " + incident.getDescription(), Toast.LENGTH_SHORT).show();
+
+        /* Si vous avez un fragment de commentaires, décommentez ceci :
+        getParentFragmentManager().beginTransaction()
+                .replace(R.id.nav_host_fragment, CommentFragment.newInstance(incident.getId()))
+                .addToBackStack(null).commit();
+        */
+    }
 }
