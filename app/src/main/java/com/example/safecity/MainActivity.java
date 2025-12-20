@@ -39,8 +39,8 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 /**
- * Activité principale optimisée.
- * Le bouton recherche utilise désormais Material Design 3 et supporte la touche Entrée.
+ * Activité principale de SafeCity.
+ * Correction apportée : Gestion de la navigation programmée sans conflit de fragments.
  */
 public class MainActivity extends AppCompatActivity implements LocationHelper.LocationListener {
 
@@ -57,36 +57,57 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Initialisation des outils
         firestoreRepo = new FirestoreRepository();
         locationHelper = new LocationHelper(this);
         checkPermissionsAndStartGPS();
-
         setupFCM();
 
+        // Liaison UI
         btnSearch = findViewById(R.id.btn_search);
         btnSos = findViewById(R.id.btn_sos);
         fabStats = findViewById(R.id.fab_stats);
         bottomNav = findViewById(R.id.bottom_nav_bar);
 
+        // Configuration des composants
         setupFloatingButtons();
+        setupBottomNav(); // Initialisation du listener de navigation
 
-        // Liaison du bouton de recherche de la barre supérieure
         btnSearch.setOnClickListener(v -> showSearchDialog());
 
+        // Chargement initial (Home) si premier lancement
+        if (savedInstanceState == null) {
+            bottomNav.setSelectedItemId(R.id.nav_home);
+        }
+
+        checkUserRole();
+        handleNotificationIntent(getIntent());
+    }
+
+    /**
+     * Définit la logique de navigation de la barre du bas.
+     * Extraite en méthode pour pouvoir être réactivée/désactivée facilement.
+     */
+    private void setupBottomNav() {
         bottomNav.setOnItemSelectedListener(item -> {
             Fragment selectedFragment = null;
             int itemId = item.getItemId();
 
-            if (itemId == R.id.nav_home) selectedFragment = new HomeFragment();
-            else if (itemId == R.id.nav_map) selectedFragment = new MapFragment();
-            else if (itemId == R.id.nav_create) {
+            if (itemId == R.id.nav_home) {
+                selectedFragment = new HomeFragment();
+            } else if (itemId == R.id.nav_map) {
+                selectedFragment = new MapFragment();
+            } else if (itemId == R.id.nav_create) {
                 if (FirebaseAuth.getInstance().getCurrentUser() == null) {
                     redirectToLogin();
                     return false;
                 }
                 selectedFragment = new SignalementFragment();
-            } else if (itemId == R.id.nav_activity) selectedFragment = new NotificationsFragment();
-            else if (itemId == R.id.nav_profile) selectedFragment = new ProfileFragment();
+            } else if (itemId == R.id.nav_activity) {
+                selectedFragment = new NotificationsFragment();
+            } else if (itemId == R.id.nav_profile) {
+                selectedFragment = new ProfileFragment();
+            }
 
             if (selectedFragment != null) {
                 getSupportFragmentManager().beginTransaction()
@@ -95,13 +116,56 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
             }
             return true;
         });
+    }
 
-        if (savedInstanceState == null) {
-            bottomNav.setSelectedItemId(R.id.nav_home);
+    /**
+     * Navigue vers la carte et centre la caméra sur des coordonnées précises.
+     * Résout le problème de "l'écran bleu" (conflit de création de fragments).
+     */
+    public void navigateToMapAndFocus(double lat, double lng) {
+        // 1. Sécurité : éviter l'océan (0,0) ou les erreurs de parsing
+        if (lat == 0 && lng == 0) {
+            Toast.makeText(this, "Coordonnées invalides", Toast.LENGTH_SHORT).show();
+            return;
         }
 
-        checkUserRole();
-        handleNotificationIntent(getIntent());
+        // 2. Désactiver temporairement le listener pour éviter que setSelectedItemId
+        // ne déclenche la création d'un MapFragment standard sans arguments.
+        bottomNav.setOnItemSelectedListener(null);
+        bottomNav.setSelectedItemId(R.id.nav_map);
+
+        // 3. Réactiver le listener pour les futurs clics manuels de l'utilisateur
+        setupBottomNav();
+
+        // 4. Créer manuellement le fragment avec les arguments de focus
+        MapFragment mapFragment = new MapFragment();
+        Bundle args = new Bundle();
+        args.putDouble("focus_lat", lat);
+        args.putDouble("focus_lng", lng);
+        mapFragment.setArguments(args);
+
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.nav_host_fragment, mapFragment)
+                .commit();
+    }
+
+    /**
+     * Recherche filtrée (transfère la requête au HomeFragment).
+     */
+    private void performSearch(String query) {
+        // On change visuellement l'onglet vers Home sans recréer le fragment via le listener
+        bottomNav.setOnItemSelectedListener(null);
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        setupBottomNav();
+
+        HomeFragment homeFragment = new HomeFragment();
+        Bundle args = new Bundle();
+        args.putString("search_query", query);
+        homeFragment.setArguments(args);
+
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.nav_host_fragment, homeFragment)
+                .commit();
     }
 
     private void setupFCM() {
@@ -143,7 +207,9 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                     }
                 }
                 @Override
-                public void onError(Exception e) {}
+                public void onError(Exception e) {
+                    Log.e("MainActivity", "Erreur rôle: " + e.getMessage());
+                }
             });
         }
     }
@@ -157,14 +223,11 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         startActivity(callIntent);
     }
 
-    /**
-     * Affiche un dialogue de recherche moderne.
-     */
     private void showSearchDialog() {
         final EditText input = new EditText(this);
         input.setHint("Ex: Accident, Incendie, Route...");
         input.setSingleLine(true);
-        input.setImeOptions(EditorInfo.IME_ACTION_SEARCH); // Définit le bouton "Loupe" sur le clavier
+        input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
 
         FrameLayout container = new FrameLayout(this);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -186,7 +249,6 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                 .setNegativeButton("Annuler", null)
                 .create();
 
-        // Gestion du bouton "Chercher" du clavier
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 String query = input.getText().toString().trim();
@@ -198,33 +260,6 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         });
 
         dialog.show();
-    }
-
-    private void performSearch(String query) {
-        if (bottomNav.getSelectedItemId() != R.id.nav_home) {
-            bottomNav.setSelectedItemId(R.id.nav_home);
-        }
-
-        HomeFragment homeFragment = new HomeFragment();
-        Bundle args = new Bundle();
-        args.putString("search_query", query);
-        homeFragment.setArguments(args);
-
-        getSupportFragmentManager().beginTransaction()
-                .replace(R.id.nav_host_fragment, homeFragment)
-                .commit();
-    }
-
-    public void navigateToMapAndFocus(double lat, double lng) {
-        bottomNav.setSelectedItemId(R.id.nav_map);
-        MapFragment mapFragment = new MapFragment();
-        Bundle args = new Bundle();
-        args.putDouble("focus_lat", lat);
-        args.putDouble("focus_lng", lng);
-        mapFragment.setArguments(args);
-        getSupportFragmentManager().beginTransaction()
-                .replace(R.id.nav_host_fragment, mapFragment)
-                .commit();
     }
 
     private void redirectToLogin() {
@@ -240,13 +275,13 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
     }
 
     private void handleNotificationIntent(Intent intent) {
-        if (intent != null && intent.hasExtra("lat")) {
+        if (intent != null && intent.hasExtra("lat") && intent.hasExtra("lng")) {
             try {
                 double lat = Double.parseDouble(intent.getStringExtra("lat"));
                 double lng = Double.parseDouble(intent.getStringExtra("lng"));
                 navigateToMapAndFocus(lat, lng);
             } catch (Exception e) {
-                Log.e("MainActivity", "Erreur coordonnées notif");
+                Log.e("MainActivity", "Erreur coordonnées notification");
             }
         }
     }
@@ -268,6 +303,6 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
 
     @Override
     public void onLocationError(String message) {
-        Log.e("MainActivity", "GPS: " + message);
+        Log.e("MainActivity", "GPS Error: " + message);
     }
 }

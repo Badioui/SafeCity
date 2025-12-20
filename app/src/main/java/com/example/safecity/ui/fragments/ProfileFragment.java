@@ -25,7 +25,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.signature.ObjectKey;
 import com.example.safecity.LoginActivity;
 import com.example.safecity.MainActivity;
 import com.example.safecity.R;
@@ -48,8 +47,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fragment de profil permettant à l'utilisateur de gérer ses informations,
- * de voir ses signalements et de mettre à jour son identité visuelle.
+ * Fragment de profil optimisé.
+ * Le nom s'affiche instantanément via Firebase Auth et l'image ne clignote plus grâce à un cache stable.
  */
 public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
@@ -108,10 +107,8 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         auth = FirebaseAuth.getInstance();
         firestoreRepo = new FirestoreRepository();
 
-        // TOUCHER L'IMAGE POUR CHANGER
+        // Événements
         imgProfile.setOnClickListener(v -> galleryLauncher.launch("image/*"));
-
-        // TOUCHER LE NOM POUR CHANGER AUSSI (Plus intuitif)
         tvName.setOnClickListener(v -> showEditNameDialog());
 
         if (btnEditProfile != null) {
@@ -137,26 +134,33 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         loadProfileData();
     }
 
+    /**
+     * Charge les données du profil.
+     * Utilise les infos locales de FirebaseUser pour un affichage immédiat (plus de "chargement").
+     */
     private void loadProfileData() {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
+        // 1. Affichage immédiat (Données synchrones de Firebase Auth)
         tvEmail.setText(user.getEmail());
+        String displayName = user.getDisplayName();
+        tvName.setText(displayName != null && !displayName.isEmpty() ? displayName : "Citoyen");
 
+        // 2. Affichage différé (Données asynchrones de Firestore)
         firestoreRepo.getUser(user.getUid(), new FirestoreRepository.OnUserLoadedListener() {
             @Override
             public void onUserLoaded(Utilisateur utilisateur) {
                 if (isAdded() && utilisateur != null) {
+                    // Mise à jour du nom si différent de Auth
                     tvName.setText(utilisateur.getNom() != null ? utilisateur.getNom() : "Citoyen");
                     tvScore.setText("Score : " + utilisateur.getScore() + " pts (" + utilisateur.getGrade() + ")");
 
-                    // Correction Cache Glide : On utilise une signature (timestamp) pour forcer le refresh
+                    // Correction Image : Suppression de la signature dynamique pour stabiliser le cache
                     Glide.with(ProfileFragment.this)
                             .load(utilisateur.getPhotoProfilUrl())
                             .placeholder(R.drawable.ic_profile)
-                            .signature(new ObjectKey(System.currentTimeMillis())) // Force le rafraîchissement
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .skipMemoryCache(true)
+                            .diskCacheStrategy(DiskCacheStrategy.ALL) // Cache stable basé sur l'URL
                             .circleCrop()
                             .into(imgProfile);
 
@@ -189,7 +193,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         storageRef.putFile(imageUri)
                 .addOnSuccessListener(taskSnapshot -> {
                     storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                        updateProfileLinks(uri.toString(), uri);
+                        updateProfileLinks(uri.toString());
                     });
                 })
                 .addOnFailureListener(e -> {
@@ -197,14 +201,13 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 });
     }
 
-    private void updateProfileLinks(String urlString, Uri uriObj) {
+    private void updateProfileLinks(String urlString) {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
         FirebaseFirestore.getInstance().collection("utilisateurs").document(user.getUid())
                 .update("photoProfilUrl", urlString)
                 .addOnSuccessListener(aVoid -> {
-                    // On met à jour le profil Firebase Auth avec l'URL publique, pas l'URI locale
                     UserProfileChangeRequest profileUpdates = new UserProfileChangeRequest.Builder()
                             .setPhotoUri(Uri.parse(urlString))
                             .build();
@@ -215,9 +218,6 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 });
     }
 
-    /**
-     * Met à jour rétroactivement l'avatar sur tous les signalements de l'utilisateur.
-     */
     private void updateAllUserIncidents(String userId, String newPhotoUrl) {
         FirebaseFirestore firestore = FirebaseFirestore.getInstance();
         firestore.collection("incidents")
@@ -249,7 +249,7 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
         final EditText input = new EditText(getContext());
         input.setHint("Entrez votre nom");
         input.setText(tvName.getText().toString());
-        input.setSelection(input.getText().length()); // Place le curseur à la fin
+        input.setSelection(input.getText().length());
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -298,9 +298,6 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
                 });
     }
 
-    /**
-     * Met à jour rétroactivement le nom de l'auteur sur tous ses signalements.
-     */
     private void updateNameInAllIncidents(String userId, String newName) {
         FirebaseFirestore firestore = FirebaseFirestore.getInstance();
         firestore.collection("incidents")
@@ -372,13 +369,10 @@ public class ProfileFragment extends Fragment implements IncidentAdapter.OnIncid
     }
 
     @Override
-    public void onValidateClick(Incident incident) {
-        // Réservé aux autorités
-    }
+    public void onValidateClick(Incident incident) {}
 
     @Override
     public void onCommentClick(Incident incident) {
-        // Ouverture du BottomSheet de commentaires
         CommentFragment bottomSheet = CommentFragment.newInstance(incident.getId());
         bottomSheet.show(getParentFragmentManager(), "CommentBottomSheet");
     }

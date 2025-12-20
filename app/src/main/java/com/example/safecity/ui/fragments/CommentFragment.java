@@ -32,8 +32,7 @@ import java.util.List;
 
 /**
  * Fragment Premium de type BottomSheet pour l'espace de discussion.
- * Utilise BottomSheetDialogFragment pour un affichage coulissant moderne.
- * Synchronisé avec le layout fragment_comment.xml (Barre de saisie flottante).
+ * Correction : Résolution du problème de visibilité des commentaires et validation de l'ID incident.
  */
 public class CommentFragment extends BottomSheetDialogFragment {
 
@@ -64,7 +63,6 @@ public class CommentFragment extends BottomSheetDialogFragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // Chargement du layout Premium
         return inflater.inflate(R.layout.fragment_comment, container, false);
     }
 
@@ -73,7 +71,8 @@ public class CommentFragment extends BottomSheetDialogFragment {
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
         BottomSheetDialog dialog = (BottomSheetDialog) super.onCreateDialog(savedInstanceState);
 
-        // Force l'ouverture du volet en mode "étendu" (pleine hauteur possible)
+        // Force l'ouverture du volet en mode "étendu" pour assurer la visibilité immédiate
+        // Résout le problème de déploiement insuffisant (Point 5)
         dialog.setOnShowListener(dialogInterface -> {
             BottomSheetDialog d = (BottomSheetDialog) dialogInterface;
             View bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
@@ -107,7 +106,12 @@ public class CommentFragment extends BottomSheetDialogFragment {
             incidentId = getArguments().getString(ARG_INCIDENT_ID);
         }
 
-        // Chargement des données nécessaires
+        // Correction Point 5b : Si l'ID est nul, on ferme le fragment pour éviter les erreurs Firestore
+        if (incidentId == null) {
+            dismiss();
+            return;
+        }
+
         loadCurrentUserInfo();
         startListeningComments();
 
@@ -115,9 +119,6 @@ public class CommentFragment extends BottomSheetDialogFragment {
         btnSend.setOnClickListener(v -> postComment());
     }
 
-    /**
-     * Récupère les infos de l'utilisateur connecté pour marquer le commentaire.
-     */
     private void loadCurrentUserInfo() {
         String uid = FirebaseAuth.getInstance().getUid();
         if (uid != null) {
@@ -136,6 +137,7 @@ public class CommentFragment extends BottomSheetDialogFragment {
 
     /**
      * Écoute en temps réel les nouveaux commentaires sur Firestore.
+     * Correction Point 5a : Assure que l'adapter est mis à jour avant de modifier la visibilité de tvEmpty.
      */
     private void startListeningComments() {
         if (incidentId == null) return;
@@ -145,12 +147,19 @@ public class CommentFragment extends BottomSheetDialogFragment {
             public void onCommentsLoaded(List<Comment> comments) {
                 if (!isAdded()) return;
 
-                adapter.updateData(comments);
-                tvEmpty.setVisibility(comments.isEmpty() ? View.VISIBLE : View.GONE);
+                // 1. Mise à jour des données dans l'adapter (Prioritaire)
+                adapter.updateData(comments != null ? comments : new ArrayList<>());
 
-                // Auto-scroll vers le dernier commentaire reçu
-                if (!comments.isEmpty()) {
+                // 2. Gestion de la visibilité des vues (Fix commentaires invisibles)
+                if (comments != null && !comments.isEmpty()) {
+                    tvEmpty.setVisibility(View.GONE);
+                    recyclerView.setVisibility(View.VISIBLE);
+
+                    // Auto-scroll vers le dernier commentaire reçu pour fluidité
                     recyclerView.smoothScrollToPosition(comments.size() - 1);
+                } else {
+                    tvEmpty.setVisibility(View.VISIBLE);
+                    recyclerView.setVisibility(View.GONE);
                 }
             }
 
@@ -163,21 +172,17 @@ public class CommentFragment extends BottomSheetDialogFragment {
         });
     }
 
-    /**
-     * Envoie le commentaire vers Firestore via une transaction (pour mettre à jour le compteur).
-     */
     private void postComment() {
         String text = etInput.getText().toString().trim();
         FirebaseUser fbUser = FirebaseAuth.getInstance().getCurrentUser();
 
-        if (text.isEmpty()) return;
+        if (text.isEmpty() || incidentId == null) return;
 
         if (fbUser == null || currentUserData == null) {
             Toast.makeText(getContext(), "Initialisation du profil...", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Création de l'objet Commentaire
         Comment comment = new Comment(
                 incidentId,
                 fbUser.getUid(),
@@ -186,7 +191,6 @@ public class CommentFragment extends BottomSheetDialogFragment {
                 text
         );
 
-        // Feedback visuel (évite le double envoi)
         btnSend.setEnabled(false);
 
         repo.addComment(comment, new FirestoreRepository.OnFirestoreTaskComplete() {
@@ -211,7 +215,6 @@ public class CommentFragment extends BottomSheetDialogFragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Arrêt de l'écouteur Firestore pour économiser les ressources et éviter les fuites
         if (listenerRegistration != null) {
             listenerRegistration.remove();
         }

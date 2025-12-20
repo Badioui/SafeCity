@@ -50,12 +50,12 @@ import java.util.List;
 
 /**
  * Fragment principal affichant le flux d'incidents signalés.
- * Gère le filtrage par recherche textuelle et par catégorie de manière synchronisée avec le XML.
+ * Correction : Intégration de validateIncident (4 arguments) pour la comptabilisation des points.
  */
 public class HomeFragment extends Fragment implements IncidentAdapter.OnIncidentActionListener {
 
     private RecyclerView recyclerView;
-    private View layoutEmptyState; // Conteneur complet de l'état vide
+    private View layoutEmptyState;
     private TextView tvEmptyState;
     private IncidentAdapter adapter;
     private FirestoreRepository firestoreRepo;
@@ -88,16 +88,16 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        // Liaison avec les nouveaux IDs du XML
         recyclerView = view.findViewById(R.id.recycler_view_home);
         layoutEmptyState = view.findViewById(R.id.layout_empty_state);
         tvEmptyState = view.findViewById(R.id.tv_empty_state);
         chipGroup = view.findViewById(R.id.chip_group_filters_home);
 
+        // Liaison avec le bouton de la MainActivity
         fabStats = requireActivity().findViewById(R.id.fab_stats);
-        if (fabStats != null) {
-            fabStats.setVisibility(View.GONE);
-        }
+
+        // CORRECTION : On ne cache plus fabStats par défaut ici, car cela annule
+        // les changements de visibilité faits par l'activité ou les callbacks.
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         firestoreRepo = new FirestoreRepository();
@@ -114,6 +114,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                 public void onUserLoaded(Utilisateur utilisateur) {
                     if (utilisateur != null && isAdded()) {
                         String role = utilisateur.getIdRole();
+
+                        // Gestion centralisée de la visibilité selon le rôle
                         if ("admin".equalsIgnoreCase(role) || "autorite".equalsIgnoreCase(role)) {
                             isAdminMode = true;
                             if (fabStats != null) {
@@ -124,6 +126,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                             isAdminMode = false;
                             if (fabStats != null) fabStats.setVisibility(View.GONE);
                         }
+
+                        // Important : Passer le rôle à l'adapter pour afficher/cacher le bouton "Valider"
                         adapter.setCurrentUser(myUserId, role);
                     }
                 }
@@ -134,27 +138,19 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             });
         }
 
-        // --- LISTENER CHIPS (Synchronisé avec les nouveaux IDs) ---
         chipGroup.setOnCheckedChangeListener((group, checkedId) -> applyFilters(searchQuery));
     }
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_home, menu);
-
         MenuItem searchItem = menu.findItem(R.id.action_search);
         if (searchItem != null) {
             SearchView searchView = (SearchView) searchItem.getActionView();
-
             if (searchView != null) {
                 searchView.setSubmitButtonEnabled(true);
                 searchView.setIconifiedByDefault(false);
                 searchView.setQueryHint("Rechercher un incident...");
-
-                ImageView searchGoBtn = searchView.findViewById(androidx.appcompat.R.id.search_go_btn);
-                if (searchGoBtn != null) {
-                    searchGoBtn.setColorFilter(Color.BLACK);
-                }
 
                 searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
                     @Override
@@ -171,12 +167,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
                         applyFilters(newText);
                         return true;
                     }
-                });
-
-                searchView.setOnCloseListener(() -> {
-                    searchQuery = null;
-                    applyFilters(null);
-                    return false;
                 });
             }
         }
@@ -196,7 +186,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
             firestoreListener.remove();
             firestoreListener = null;
         }
-        if (fabStats != null) fabStats.setVisibility(View.GONE);
     }
 
     private void loadData() {
@@ -222,7 +211,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String categoryFilter = null;
         int checkedId = chipGroup.getCheckedChipId();
 
-        // Synchronisation des catégories avec les Chips du XML
         if (checkedId == R.id.chip_accident) categoryFilter = "Accident";
         else if (checkedId == R.id.chip_vol) categoryFilter = "Vol";
         else if (checkedId == R.id.chip_incendie) categoryFilter = "Incendie";
@@ -252,14 +240,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
         adapter.updateData(filteredList);
 
-        // Gestion de l'affichage de l'état vide ou de la liste
         if (filteredList.isEmpty()) {
             if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.VISIBLE);
-            if (tvEmptyState != null) {
-                if (categoryFilter != null) tvEmptyState.setText("Aucun '" + categoryFilter + "' trouvé.");
-                else if (queryLower != null) tvEmptyState.setText("Aucun résultat pour \"" + queryText + "\"");
-                else tvEmptyState.setText("Aucun signalement trouvé.\nSoyez le premier à informer la ville !");
-            }
             recyclerView.setVisibility(View.GONE);
         } else {
             if (layoutEmptyState != null) layoutEmptyState.setVisibility(View.GONE);
@@ -272,8 +254,8 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         String[] options = {"📊 Voir Tableau de Bord", "📢 Diffuser Alerte Officielle"};
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Administration")
-                .setItems(options, (dialog, Bayern) -> {
-                    if (Bayern == 0) showStatisticsDialog();
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) showStatisticsDialog();
                     else showSendAlertDialog();
                 })
                 .show();
@@ -293,7 +275,6 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         TextView tvPriority = new TextView(getContext());
         tvPriority.setText("Niveau d'urgence");
         tvPriority.setTypeface(null, Typeface.BOLD);
-        tvPriority.setTextColor(Color.DKGRAY);
         layout.addView(tvPriority);
 
         RadioGroup rgPriority = new RadioGroup(getContext());
@@ -308,17 +289,12 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         rgPriority.addView(rbUrgent);
         layout.addView(rgPriority);
 
-        TextView tvTitle = new TextView(getContext());
-        tvTitle.setText("Titre");
-        layout.addView(tvTitle);
         final EditText etTitle = new EditText(getContext());
+        etTitle.setHint("Titre de l'alerte");
         layout.addView(etTitle);
 
-        TextView tvMessage = new TextView(getContext());
-        tvMessage.setText("Message");
-        tvMessage.setPadding(0, 20, 0, 0);
-        layout.addView(tvMessage);
         final EditText etMessage = new EditText(getContext());
+        etMessage.setHint("Contenu du message");
         etMessage.setLines(3);
         layout.addView(etMessage);
 
@@ -364,23 +340,35 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
         });
     }
 
+    /**
+     * Gère le clic sur le bouton de validation (Autorités uniquement).
+     * Correction : Utilise validateIncident avec 4 arguments pour créditer les points à l'auteur.
+     */
     @Override
     public void onValidateClick(Incident incident) {
         new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Validation")
-                .setMessage("Valider la prise en charge ?")
-                .setPositiveButton("Oui", (d, w) -> {
-                    firestoreRepo.updateIncidentStatus(incident.getId(), "Traité", new FirestoreRepository.OnFirestoreTaskComplete() {
+                .setTitle("Validation du signalement")
+                .setMessage("En validant ce signalement, vous confirmez que l'incident a été traité. L'auteur recevra des points de score.")
+                .setPositiveButton("Valider", (d, w) -> {
+                    // Changement : Utilisation de validateIncident(id, authorId, isValid, listener)
+                    // isValid = true pour une validation réussie (+20 pts)
+                    firestoreRepo.validateIncident(incident.getId(), incident.getIdUtilisateur(), true, new FirestoreRepository.OnFirestoreTaskComplete() {
                         @Override
                         public void onSuccess() {
-                            Toast.makeText(getContext(), "Validé !", Toast.LENGTH_SHORT).show();
-                            firestoreRepo.addNotification(new NotificationApp("Résolu ✅", incident.getNomCategorie() + " traité.", "validation"));
+                            if (isAdded()) {
+                                Toast.makeText(getContext(), "Validé ! Points attribués à l'auteur.", Toast.LENGTH_SHORT).show();
+                                firestoreRepo.addNotification(new NotificationApp("Résolu ✅", incident.getNomCategorie() + " a été traité.", "validation"));
+                            }
                         }
                         @Override
-                        public void onError(Exception e) {}
+                        public void onError(Exception e) {
+                            if (isAdded()) {
+                                Toast.makeText(getContext(), "Erreur lors de la validation", Toast.LENGTH_SHORT).show();
+                            }
+                        }
                     });
                 })
-                .setNegativeButton("Non", null).show();
+                .setNegativeButton("Annuler", null).show();
     }
 
     @Override

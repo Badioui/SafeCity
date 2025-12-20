@@ -25,8 +25,8 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import java.util.List;
 
 /**
- * Adaptateur Premium pour le flux de signalements.
- * Synchronisé avec item_signalement.xml et gère les droits admin/auteur.
+ * Adaptateur synchronisé avec la gestion des rôles.
+ * Affiche le bouton de validation uniquement pour les admins et autorités.
  */
 public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.IncidentViewHolder> {
 
@@ -52,6 +52,9 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         this.actionListener = listener;
     }
 
+    /**
+     * Reçoit les informations de l'utilisateur actuel pour gérer les permissions d'affichage.
+     */
     public void setCurrentUser(String userId, String role) {
         this.currentUserId = userId;
         this.currentUserRole = role;
@@ -72,7 +75,6 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         // --- 1. IDENTITÉ AUTEUR ---
         holder.tvUsername.setText(incident.getNomUtilisateur() != null ? incident.getNomUtilisateur() : "Citoyen");
 
-        // Cache intelligent pour l'avatar (évite de charger d'anciennes photos)
         Glide.with(context)
                 .load(incident.getAuteurPhotoUrl())
                 .placeholder(R.drawable.ic_profile)
@@ -91,14 +93,13 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         holder.tvDescription.setText(incident.getDescription());
         holder.tvStatus.setText(incident.getStatut());
 
-        // Logique visuelle du badge de statut
         if (incident.isTraite()) {
             holder.tvStatus.setBackgroundResource(R.drawable.status_traite_bg);
         } else {
             holder.tvStatus.setBackgroundResource(R.drawable.status_new_bg);
         }
 
-        // --- 4. MÉDIA (Photo de l'incident) ---
+        // --- 4. MÉDIA ---
         if (incident.hasMedia()) {
             holder.cardMediaContainer.setVisibility(View.VISIBLE);
             Glide.with(context)
@@ -115,36 +116,35 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
             holder.cardMediaContainer.setVisibility(View.GONE);
         }
 
-        // --- 5. LOGIQUE DES DROITS (Visibilité des boutons) ---
+        // --- 5. LOGIQUE DES DROITS (Correction demandée) ---
         boolean isOwner = incident.getIdUtilisateur() != null && incident.getIdUtilisateur().equals(currentUserId);
         boolean isAdmin = "admin".equalsIgnoreCase(currentUserRole);
         boolean isAuthority = "autorite".equalsIgnoreCase(currentUserRole);
 
-        // Modifier/Supprimer (Auteur ou Admin)
+        // Modifier/Supprimer (Uniquement pour l'auteur ou l'admin)
         int editVisibility = (isOwner || isAdmin) ? View.VISIBLE : View.GONE;
         holder.btnEdit.setVisibility(editVisibility);
         holder.btnDelete.setVisibility(editVisibility);
 
-        // Valider (Autorité ou Admin et seulement si Nouveau)
-        holder.btnValidate.setVisibility(((isAuthority || isAdmin) && !incident.isTraite()) ? View.VISIBLE : View.GONE);
+        // Valider : Affiché si l'utilisateur est Autorité/Admin ET que l'incident n'est pas déjà traité
+        boolean canValidate = (isAuthority || isAdmin) && !incident.isTraite();
+        holder.btnValidate.setVisibility(canValidate ? View.VISIBLE : View.GONE);
 
-        // Click Listeners Admin
+        // Listeners
         holder.btnEdit.setOnClickListener(v -> { if (actionListener != null) actionListener.onEditClick(incident); });
         holder.btnDelete.setOnClickListener(v -> { if (actionListener != null) actionListener.onDeleteClick(incident); });
         holder.btnValidate.setOnClickListener(v -> { if (actionListener != null) actionListener.onValidateClick(incident); });
 
-        // --- 6. ACTIONS SOCIALES & CARTE ---
+        // --- 6. ACTIONS SOCIALES ---
         holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
         holder.tvCommentsCount.setText(String.valueOf(incident.getCommentsCount()));
 
-        // État du bouton Like
-        if (incident.isLikedBy(currentUserId)) {
+        if (currentUserId != null && incident.isLikedBy(currentUserId)) {
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_light));
         } else {
             holder.btnLike.setColorFilter(ContextCompat.getColor(context, android.R.color.darker_gray));
         }
 
-        // Listeners
         holder.btnLike.setOnClickListener(v -> toggleLike(incident, holder));
         holder.btnComment.setOnClickListener(v -> { if (actionListener != null) actionListener.onCommentClick(incident); });
         holder.btnMap.setOnClickListener(v -> { if (actionListener != null) actionListener.onMapClick(incident); });
@@ -159,7 +159,6 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         boolean isLiked = incident.isLikedBy(currentUserId);
 
-        // UI Optimiste
         if (isLiked) {
             incident.getLikedBy().remove(currentUserId);
             incident.setLikesCount(Math.max(0, incident.getLikesCount() - 1));
@@ -171,11 +170,10 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
         }
         holder.tvLikesCount.setText(String.valueOf(incident.getLikesCount()));
 
-        // Sync Firestore
         db.collection("incidents").document(incident.getId())
                 .update("likesCount", FieldValue.increment(isLiked ? -1 : 1),
                         "likedBy", isLiked ? FieldValue.arrayRemove(currentUserId) : FieldValue.arrayUnion(currentUserId))
-                .addOnFailureListener(e -> notifyDataSetChanged()); // Rollback en cas d'erreur
+                .addOnFailureListener(e -> notifyDataSetChanged());
     }
 
     @Override
@@ -204,10 +202,8 @@ public class IncidentAdapter extends RecyclerView.Adapter<IncidentAdapter.Incide
             tvDescription = itemView.findViewById(R.id.tv_description);
             imgPhoto = itemView.findViewById(R.id.img_incident_photo);
             cardMediaContainer = itemView.findViewById(R.id.card_media_container);
-
             tvLikesCount = itemView.findViewById(R.id.tv_likes_count);
             tvCommentsCount = itemView.findViewById(R.id.tv_comments_count);
-
             btnMap = itemView.findViewById(R.id.btn_open_map);
             btnLike = itemView.findViewById(R.id.btn_like);
             btnComment = itemView.findViewById(R.id.btn_comment);

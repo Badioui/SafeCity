@@ -18,13 +18,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Repository central pour SafeCity.
- * Gère les incidents, utilisateurs, notifications, catégories et commentaires.
+ * Repository central unifié pour SafeCity.
+ * Version finale fusionnée : Gère la Gamification, le temps réel,
+ * le profil utilisateur et la sécurité des données.
  */
 public class FirestoreRepository {
 
     private final FirebaseFirestore db;
 
+    // Constantes de collections unifiées
     private static final String COL_INCIDENTS = "incidents";
     private static final String COL_USERS = "utilisateurs";
     private static final String COL_NOTIFS = "notifications";
@@ -38,7 +40,7 @@ public class FirestoreRepository {
     }
 
     // ==================================================================
-    // INTERFACES DE CALLBACK
+    // INTERFACES DE CALLBACK (LISTENERS)
     // ==================================================================
 
     public interface OnFirestoreTaskComplete { void onSuccess(); void onError(Exception e); }
@@ -51,43 +53,68 @@ public class FirestoreRepository {
     public interface OnRolesLoadedListener { void onRolesLoaded(List<Role> roles); void onError(Exception e); }
 
     // ==================================================================
+    // LOGIQUE DE VALIDATION & GAMIFICATION (ADMIN)
+    // ==================================================================
+
+    /**
+     * Valide un incident (Vrai signalement) : +20 points pour l'auteur.
+     * Rejette un incident (Faux signalement) : -10 points pour l'auteur.
+     * Utilise une transaction pour garantir la cohérence Statut + Score.
+     */
+    public void validateIncident(String incidentId, String authorId, boolean isValid, OnFirestoreTaskComplete listener) {
+        String newStatus = isValid ? Incident.STATUT_TRAITE : "Rejeté";
+        int pointsChange = isValid ? 20 : -10;
+
+        db.runTransaction(transaction -> {
+                    DocumentReference incRef = db.collection(COL_INCIDENTS).document(incidentId);
+                    DocumentReference userRef = db.collection(COL_USERS).document(authorId);
+
+                    transaction.update(incRef, "statut", newStatus);
+                    transaction.update(userRef, "score", FieldValue.increment(pointsChange));
+
+                    return null;
+                }).addOnSuccessListener(aVoid -> listener.onSuccess())
+                .addOnFailureListener(listener::onError);
+    }
+
+    /**
+     * Incrémente ou décrémente manuellement les points d'un utilisateur.
+     */
+    public void updateUserScore(String userId, int points) {
+        if (userId == null) return;
+        db.collection(COL_USERS).document(userId).update("score", FieldValue.increment(points));
+    }
+
+    /**
+     * Alias de updateUserScore utilisé par SignalementFragment.
+     */
+    public void incrementUserScore(String userId, int points) {
+        updateUserScore(userId, points);
+    }
+
+    // ==================================================================
     // MÉTHODES D'ÉCRITURE
     // ==================================================================
 
     public void addIncident(Incident incident, OnFirestoreTaskComplete listener) {
         db.collection(COL_INCIDENTS).add(incident)
                 .addOnSuccessListener(ref -> {
-                    // On met à jour l'objet localement
                     incident.setId(ref.getId());
-                    // Optionnel : on ne sauvegarde plus l'ID dans le document pour éviter les conflits
                     listener.onSuccess();
                 })
                 .addOnFailureListener(listener::onError);
     }
 
-    public void updateIncidentStatus(String incidentId, String newStatus, OnFirestoreTaskComplete listener) {
-        db.collection(COL_INCIDENTS).document(incidentId).update("statut", newStatus)
-                .addOnSuccessListener(aVoid -> listener.onSuccess())
-                .addOnFailureListener(listener::onError);
-    }
-
+    /**
+     * Met à jour les détails d'un incident existant.
+     * Requis par SignalementFragment pour la modification.
+     */
     public void updateIncidentDetails(Incident incident, OnFirestoreTaskComplete listener) {
         if (incident.getId() == null) {
-            listener.onError(new Exception("ID manquant"));
+            listener.onError(new Exception("ID de l'incident manquant pour la mise à jour"));
             return;
         }
         db.collection(COL_INCIDENTS).document(incident.getId()).set(incident)
-                .addOnSuccessListener(aVoid -> listener.onSuccess())
-                .addOnFailureListener(listener::onError);
-    }
-
-    public void incrementUserScore(String userId, int points) {
-        if (userId == null) return;
-        db.collection(COL_USERS).document(userId).update("score", FieldValue.increment(points));
-    }
-
-    public void addOfficialAlert(NotificationApp alert, OnFirestoreTaskComplete listener) {
-        db.collection(COL_OFFICIAL_ALERTS).add(alert)
                 .addOnSuccessListener(aVoid -> listener.onSuccess())
                 .addOnFailureListener(listener::onError);
     }
@@ -96,19 +123,29 @@ public class FirestoreRepository {
         db.collection(COL_NOTIFS).add(notification);
     }
 
+    public void addOfficialAlert(NotificationApp alert, OnFirestoreTaskComplete listener) {
+        db.collection(COL_OFFICIAL_ALERTS).add(alert)
+                .addOnSuccessListener(aVoid -> listener.onSuccess())
+                .addOnFailureListener(listener::onError);
+    }
+
+    /**
+     * Ajoute un commentaire et incrémente le compteur de l'incident (Transactionnel).
+     */
     public void addComment(Comment comment, OnFirestoreTaskComplete listener) {
         DocumentReference incidentRef = db.collection(COL_INCIDENTS).document(comment.getIdIncident());
         DocumentReference commentRef = incidentRef.collection(COL_COMMENTS).document();
 
         db.runTransaction(transaction -> {
-            transaction.update(incidentRef, "commentsCount", FieldValue.increment(1));
-            transaction.set(commentRef, comment);
-            return null;
-        }).addOnSuccessListener(aVoid -> listener.onSuccess()).addOnFailureListener(listener::onError);
+                    transaction.update(incidentRef, "commentsCount", FieldValue.increment(1));
+                    transaction.set(commentRef, comment);
+                    return null;
+                }).addOnSuccessListener(aVoid -> listener.onSuccess())
+                .addOnFailureListener(listener::onError);
     }
 
     // ==================================================================
-    // MÉTHODES DE LECTURE (SÉCURISÉES CONTRE LE CRASH ID)
+    // MÉTHODES DE LECTURE & TEMPS RÉEL
     // ==================================================================
 
     public ListenerRegistration getIncidentsRealtime(OnDataLoadListener listener) {
@@ -119,72 +156,33 @@ public class FirestoreRepository {
                     if (snapshots != null) {
                         for (DocumentSnapshot doc : snapshots.getDocuments()) {
                             Incident inc = doc.toObject(Incident.class);
-                            if (inc != null) {
-                                inc.setId(doc.getId()); // Injection manuelle sécurisée
-                                list.add(inc);
-                            }
+                            if (inc != null) { inc.setId(doc.getId()); list.add(inc); }
                         }
                     }
                     listener.onIncidentsLoaded(list);
                 });
     }
 
+    /**
+     * Récupère les incidents d'un utilisateur spécifique (Utilisé par ProfileFragment).
+     */
     public void getMyIncidents(String userId, OnDataLoadListener listener) {
-        db.collection(COL_INCIDENTS).whereEqualTo("idUtilisateur", userId)
+        db.collection(COL_INCIDENTS)
+                .whereEqualTo("idUtilisateur", userId)
                 .orderBy("dateSignalement", Query.Direction.DESCENDING)
                 .get()
-                .addOnSuccessListener(snaps -> {
+                .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<Incident> list = new ArrayList<>();
-                    for (DocumentSnapshot doc : snaps.getDocuments()) {
-                        Incident inc = doc.toObject(Incident.class);
-                        if (inc != null) { inc.setId(doc.getId()); list.add(inc); }
+                    for (DocumentSnapshot doc : queryDocumentSnapshots) {
+                        Incident incident = doc.toObject(Incident.class);
+                        if (incident != null) {
+                            incident.setId(doc.getId());
+                            list.add(incident);
+                        }
                     }
                     listener.onIncidentsLoaded(list);
-                }).addOnFailureListener(listener::onError);
-    }
-
-    public void getIncident(String incidentId, OnIncidentLoadedListener listener) {
-        db.collection(COL_INCIDENTS).document(incidentId).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        Incident incident = doc.toObject(Incident.class);
-                        if (incident != null) incident.setId(doc.getId());
-                        listener.onIncidentLoaded(incident);
-                    } else { listener.onError(new Exception("Introuvable")); }
-                }).addOnFailureListener(listener::onError);
-    }
-
-    public void getUser(String uid, OnUserLoadedListener listener) {
-        db.collection(COL_USERS).document(uid).get()
-                .addOnSuccessListener(doc -> {
-                    if (doc.exists()) {
-                        Utilisateur user = doc.toObject(Utilisateur.class);
-                        if (user != null) user.setId(doc.getId());
-                        listener.onUserLoaded(user);
-                    } else { listener.onError(new Exception("Profil inexistant")); }
-                }).addOnFailureListener(listener::onError);
-    }
-
-    public void getNotifications(OnNotificationsLoadedListener listener) {
-        db.collection(COL_NOTIFS).orderBy("date", Query.Direction.DESCENDING).limit(30)
-                .get()
-                .addOnSuccessListener(snaps -> {
-                    if (snaps != null) listener.onNotificationsLoaded(snaps.toObjects(NotificationApp.class));
-                }).addOnFailureListener(listener::onError);
-    }
-
-    public void getCategories(OnCategoriesLoadedListener listener) {
-        db.collection(COL_CATEGORIES).orderBy("nomCategorie").get()
-                .addOnSuccessListener(snaps -> {
-                    if (snaps != null) listener.onCategoriesLoaded(snaps.toObjects(Categorie.class));
-                }).addOnFailureListener(listener::onError);
-    }
-
-    public void getRoles(OnRolesLoadedListener listener) {
-        db.collection(COL_ROLES).get()
-                .addOnSuccessListener(snaps -> {
-                    if (snaps != null) listener.onRolesLoaded(snaps.toObjects(Role.class));
-                }).addOnFailureListener(listener::onError);
+                })
+                .addOnFailureListener(listener::onError);
     }
 
     public ListenerRegistration getCommentsRealtime(String incidentId, OnCommentsLoadedListener listener) {
@@ -201,6 +199,43 @@ public class FirestoreRepository {
                     }
                     listener.onCommentsLoaded(list);
                 });
+    }
+
+    public void getUser(String uid, OnUserLoadedListener listener) {
+        db.collection(COL_USERS).document(uid).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Utilisateur user = doc.toObject(Utilisateur.class);
+                        if (user != null) user.setId(doc.getId());
+                        listener.onUserLoaded(user);
+                    } else { listener.onError(new Exception("Profil inexistant")); }
+                }).addOnFailureListener(listener::onError);
+    }
+
+    public void getIncident(String incidentId, OnIncidentLoadedListener listener) {
+        db.collection(COL_INCIDENTS).document(incidentId).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Incident inc = doc.toObject(Incident.class);
+                        if (inc != null) inc.setId(doc.getId());
+                        listener.onIncidentLoaded(inc);
+                    } else { listener.onError(new Exception("Signalement introuvable")); }
+                }).addOnFailureListener(listener::onError);
+    }
+
+    public void getNotifications(OnNotificationsLoadedListener listener) {
+        db.collection(COL_NOTIFS).orderBy("date", Query.Direction.DESCENDING).limit(30)
+                .get()
+                .addOnSuccessListener(snaps -> {
+                    if (snaps != null) listener.onNotificationsLoaded(snaps.toObjects(NotificationApp.class));
+                }).addOnFailureListener(listener::onError);
+    }
+
+    public void getCategories(OnCategoriesLoadedListener listener) {
+        db.collection(COL_CATEGORIES).orderBy("nomCategorie").get()
+                .addOnSuccessListener(snaps -> {
+                    if (snaps != null) listener.onCategoriesLoaded(snaps.toObjects(Categorie.class));
+                }).addOnFailureListener(listener::onError);
     }
 
     // ==================================================================
