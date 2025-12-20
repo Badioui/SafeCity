@@ -31,8 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fragment Premium de type BottomSheet pour l'espace de discussion.
- * Correction : Résolution du problème de visibilité des commentaires et validation de l'ID incident.
+ * Fragment optimisé de type BottomSheet pour l'espace de discussion.
+ * Fusion des versions : Sécurités Firestore (ID incident) + Forçage de l'état étendu.
  */
 public class CommentFragment extends BottomSheetDialogFragment {
 
@@ -66,23 +66,19 @@ public class CommentFragment extends BottomSheetDialogFragment {
         return inflater.inflate(R.layout.fragment_comment, container, false);
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        BottomSheetDialog dialog = (BottomSheetDialog) super.onCreateDialog(savedInstanceState);
-
-        // Force l'ouverture du volet en mode "étendu" pour assurer la visibilité immédiate
-        // Résout le problème de déploiement insuffisant (Point 5)
-        dialog.setOnShowListener(dialogInterface -> {
-            BottomSheetDialog d = (BottomSheetDialog) dialogInterface;
-            View bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+    public void onStart() {
+        super.onStart();
+        // Force l'ouverture complète du volet dès le début
+        Dialog dialog = getDialog();
+        if (dialog != null) {
+            View bottomSheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
             if (bottomSheet != null) {
                 BottomSheetBehavior<View> behavior = BottomSheetBehavior.from(bottomSheet);
                 behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
                 behavior.setSkipCollapsed(true);
             }
-        });
-        return dialog;
+        }
     }
 
     @Override
@@ -106,7 +102,7 @@ public class CommentFragment extends BottomSheetDialogFragment {
             incidentId = getArguments().getString(ARG_INCIDENT_ID);
         }
 
-        // Correction Point 5b : Si l'ID est nul, on ferme le fragment pour éviter les erreurs Firestore
+        // Sécurité : Si l'ID est nul, on ferme le fragment pour éviter les erreurs Firestore
         if (incidentId == null) {
             dismiss();
             return;
@@ -137,7 +133,6 @@ public class CommentFragment extends BottomSheetDialogFragment {
 
     /**
      * Écoute en temps réel les nouveaux commentaires sur Firestore.
-     * Correction Point 5a : Assure que l'adapter est mis à jour avant de modifier la visibilité de tvEmpty.
      */
     private void startListeningComments() {
         if (incidentId == null) return;
@@ -147,15 +142,13 @@ public class CommentFragment extends BottomSheetDialogFragment {
             public void onCommentsLoaded(List<Comment> comments) {
                 if (!isAdded()) return;
 
-                // 1. Mise à jour des données dans l'adapter (Prioritaire)
+                // Mise à jour de l'adapter avant de changer la visibilité pour éviter les sauts visuels
                 adapter.updateData(comments != null ? comments : new ArrayList<>());
 
-                // 2. Gestion de la visibilité des vues (Fix commentaires invisibles)
                 if (comments != null && !comments.isEmpty()) {
                     tvEmpty.setVisibility(View.GONE);
                     recyclerView.setVisibility(View.VISIBLE);
-
-                    // Auto-scroll vers le dernier commentaire reçu pour fluidité
+                    // Scroll automatique pour voir le dernier message
                     recyclerView.smoothScrollToPosition(comments.size() - 1);
                 } else {
                     tvEmpty.setVisibility(View.VISIBLE);

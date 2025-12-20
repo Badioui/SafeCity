@@ -254,4 +254,49 @@ public class FirestoreRepository {
                     .addOnFailureListener(listener::onError);
         }
     }
+
+    /**
+     * Alterne le Like d'un utilisateur sur un incident.
+     * Utilise la constante COL_INCIDENTS pour la sécurité.
+     */
+    public void toggleLike(String incidentId, String userId) {
+        // Remplacement de "incidents" par COL_INCIDENTS
+        DocumentReference ref = db.collection(COL_INCIDENTS).document(incidentId);
+
+        db.runTransaction(transaction -> {
+            DocumentSnapshot snapshot = transaction.get(ref);
+            List<String> likedBy = (List<String>) snapshot.get("likedBy");
+            if (likedBy == null) likedBy = new ArrayList<>();
+
+            if (likedBy.contains(userId)) {
+                likedBy.remove(userId);
+                transaction.update(ref, "likedBy", likedBy);
+                transaction.update(ref, "likesCount", FieldValue.increment(-1));
+            } else {
+                likedBy.add(userId);
+                transaction.update(ref, "likedBy", likedBy);
+                transaction.update(ref, "likesCount", FieldValue.increment(1));
+            }
+            return null;
+        });
+    }
+
+    /**
+     * Écoute les changements d'un incident spécifique (pour mettre à jour le volet ouvert).
+     * Utilise la constante COL_INCIDENTS pour la sécurité.
+     */
+    public ListenerRegistration getIncidentListener(String incidentId, OnIncidentLoadedListener listener) {
+        // Remplacement de "incidents" par COL_INCIDENTS
+        return db.collection(COL_INCIDENTS).document(incidentId)
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) { listener.onError(e); return; }
+                    if (snapshot != null && snapshot.exists()) {
+                        Incident inc = snapshot.toObject(Incident.class);
+                        if (inc != null) {
+                            inc.setId(snapshot.getId());
+                            listener.onIncidentLoaded(inc);
+                        }
+                    }
+                });
+    }
 }

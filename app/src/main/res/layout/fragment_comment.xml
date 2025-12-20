@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:orientation="vertical"
+    android:background="@android:color/white"
+    android:paddingBottom="8dp">
 
     <!-- 1. HEADER DU VOLET (Drag handle + Titre) -->
     <View
@@ -13,57 +15,52 @@
         android:layout_width="40dp"
         android:layout_height="4dp"
         android:layout_marginTop="12dp"
-        android:background="#E0E0E0"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:layout_gravity="center_horizontal"
+        android:background="#E0E0E0" />
 
     <TextView
         android:id="@+id/tv_sheet_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
+        android:layout_gravity="center_horizontal"
         android:text="Commentaires"
         android:textColor="#212121"
         android:textSize="18sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/drag_handle" />
+        android:textStyle="bold" />
 
     <View
         android:id="@+id/header_divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="16dp"
-        android:background="#F0F0F0"
-        app:layout_constraintTop_toBottomOf="@id/tv_sheet_title" />
+        android:background="#F0F0F0" />
 
-    <!-- 2. LISTE DES COMMENTAIRES -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler_comments"
+    <!-- 2. LISTE DES COMMENTAIRES (Utilisation du weight=1 pour occuper l'espace) -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:clipToPadding="false"
-        android:paddingTop="8dp"
-        android:paddingBottom="80dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/header_divider"
-        tools:listitem="@layout/item_comment" />
+        android:layout_weight="1">
 
-    <!-- État vide -->
-    <TextView
-        android:id="@+id/tv_no_comments"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Aucun commentaire pour le moment.\nSoyez le premier à réagir !"
-        android:gravity="center"
-        android:alpha="0.4"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/recycler_comments"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="@id/recycler_comments" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_comments"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="8dp"
+            tools:listitem="@layout/item_comment" />
+
+        <!-- État vide -->
+        <TextView
+            android:id="@+id/tv_no_comments"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Aucun commentaire pour le moment.\nSoyez le premier à réagir !"
+            android:gravity="center"
+            android:alpha="0.4"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <!-- 3. BARRE DE SAISIE FLOTTANTE -->
     <com.google.android.material.card.MaterialCardView
@@ -72,9 +69,9 @@
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
         app:cardCornerRadius="28dp"
-        app:cardElevation="8dp"
-        app:strokeWidth="0dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:cardElevation="4dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#F0F0F0">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -110,4 +107,4 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

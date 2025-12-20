@@ -95,7 +95,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/sheet_img_profile"
-            tools:text="Description complète de l'incident avec les détails nécessaires pour les autorités." />
+            tools:text="Description complète de l'incident..." />
 
         <!-- Image de l'incident -->
         <com.google.android.material.card.MaterialCardView
@@ -140,11 +140,16 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/sheet_divider">
 
+            <!-- ID ajouté ici : sheet_img_heart -->
             <ImageView
+                android:id="@+id/sheet_img_heart"
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@drawable/ic_heart"
-                app:tint="@android:color/holo_red_dark" />
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                app:tint="@android:color/black" />
 
             <TextView
                 android:id="@+id/sheet_tv_likes"

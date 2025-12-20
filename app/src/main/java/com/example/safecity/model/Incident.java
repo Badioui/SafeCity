@@ -2,7 +2,6 @@ package com.example.safecity.model;
 
 import com.google.android.gms.maps.model.LatLng;
 import com.google.maps.android.clustering.ClusterItem;
-import com.google.firebase.firestore.DocumentId;
 import com.google.firebase.firestore.Exclude;
 import com.google.firebase.firestore.IgnoreExtraProperties;
 
@@ -137,9 +136,13 @@ public class Incident implements ClusterItem {
         return (photoUrl != null && !photoUrl.isEmpty()) || (videoUrl != null && !videoUrl.isEmpty());
     }
 
+    /**
+     * Vérifie si l'utilisateur a aimé cet incident.
+     * Sécurité ajoutée pour éviter les NullPointerException.
+     */
     @Exclude
     public boolean isLikedBy(String userId) {
-        return likedBy != null && likedBy.contains(userId);
+        return userId != null && likedBy != null && likedBy.contains(userId);
     }
 
     // --- Implémentation de ClusterItem ---
@@ -161,4 +164,5 @@ public class Incident implements ClusterItem {
     public String getSnippet() {
         return description;
     }
+
 }
