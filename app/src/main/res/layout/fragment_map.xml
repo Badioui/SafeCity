@@ -5,124 +5,158 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:background="@android:color/white"
+    tools:context=".ui.fragments.MapFragment">
 
-    <!-- 1. LA CARTE (Prend tout l'écran) -->
+    <!-- 1. LA CARTE -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/map_fragment_view"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- 2. CONTENEUR SUPÉRIEUR (Recherche + Filtres fournis) -->
+    <!-- 2. CONTENEUR SUPÉRIEUR (Barre de recherche et Filtres) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:clipToPadding="false">
 
-        <!-- Barre de recherche flottante -->
+        <!-- Barre de recherche style "Google Maps" -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_search"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="28dp"
-            app:cardElevation="6dp"
+            app:cardElevation="8dp"
             app:strokeWidth="0dp"
             android:layout_marginBottom="12dp"
-            android:backgroundTint="@android:color/white">
+            app:cardBackgroundColor="@android:color/white">
 
             <androidx.appcompat.widget.SearchView
                 android:id="@+id/map_search_view"
                 android:layout_width="match_parent"
-                android:layout_height="50dp"
+                android:layout_height="52dp"
                 app:iconifiedByDefault="false"
                 app:queryHint="Rechercher un lieu..."
-                app:searchIcon="@drawable/ic_search"
-                app:queryBackground="@android:color/transparent" />
+                app:searchIcon="@android:drawable/ic_menu_search"
+                app:queryBackground="@android:color/transparent"
+                app:closeIcon="@android:drawable/ic_menu_close_clear_cancel" />
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- LES FILTRES (Configuration exacte demandée) -->
-        <HorizontalScrollView
+        <!-- ZONE DES FILTRES -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:clipToPadding="false">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/chip_group_filters"
+            <!-- FILTRE DE STATUT (Sans icône, épuré) -->
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_filter_status"
+                style="@style/Widget.MaterialComponents.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:singleLine="true"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                android:paddingBottom="4dp">
+                android:text="Nouveau"
+                android:checkable="true"
+                android:checked="false"
+                app:chipBackgroundColor="@color/chip_status_selector"
+                android:textColor="@android:color/white"
+                app:chipIconVisible="false"
+                android:elevation="4dp"
+                android:layout_marginEnd="8dp"/>
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_all"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
+            <!-- SÉPARATEUR VISUEL DISCRET -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:background="#DDDDDD"
+                android:layout_marginEnd="8dp"/>
+
+            <!-- LISTE DES CATÉGORIES -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:overScrollMode="never">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_filters"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Tous"
-                    android:textColor="@android:color/black" />
+                    app:singleLine="true"
+                    app:singleSelection="true"
+                    app:selectionRequired="true">
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_accident"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Accident"
-                    android:textColor="@android:color/black" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_all"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="Tous"
+                        android:textColor="@android:color/black" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_vol"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Vol"
-                    android:textColor="@android:color/black" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_accident"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Accident"
+                        android:textColor="@android:color/black" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_incendie"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Incendie"
-                    android:textColor="@android:color/black" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_vol"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Vol"
+                        android:textColor="@android:color/black"/>
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_panne"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Panne"
-                    android:textColor="@android:color/black" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_panne"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Panne"
+                        android:textColor="@android:color/black"/>
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/chip_autre"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Autre"
-                    android:textColor="@android:color/black" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_incendie"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Incendie"
+                        android:textColor="@android:color/black"/>
 
-            </com.google.android.material.chip.ChipGroup>
-        </HorizontalScrollView>
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_autre"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Autre"
+                        android:textColor="@android:color/black"/>
+
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- 3. BOUTON MA POSITION (FAB) -->
+    <!-- FAB : MA POSITION (À GAUCHE, REHAUSSÉ) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_my_location"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_map"
-        app:tint="?attr/colorPrimary"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="20dp"
+        android:layout_marginBottom="80dp"
+        android:src="@android:drawable/ic_menu_mylocation"
         app:backgroundTint="@android:color/white"
-        app:elevation="6dp"
+        app:tint="@android:color/black"
+        app:elevation="8dp"
         android:contentDescription="Ma position" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -31,6 +31,7 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
@@ -43,8 +44,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Fragment gérant la cartographie interactive de SafeCity.
- * Gère le clustering des incidents, la recherche de lieux et l'affichage des détails.
+ * Fragment fusionné gérant la cartographie interactive de SafeCity.
+ * Gère le double filtrage combiné (Statut + Catégorie) et la BottomSheet avec média.
  */
 public class MapFragment extends Fragment implements OnMapReadyCallback {
 
@@ -53,11 +54,18 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     private ClusterManager<Incident> clusterManager;
     private LocationHelper locationHelper;
 
+    // Données et État des filtres
+    private List<Incident> allIncidents = new ArrayList<>();
+    private String selectedCategory = "Tous";
+    private boolean isShowingTraite = false; // Bascule entre Nouveau et Traité
+
+    // Focus de navigation (si ouvert depuis une notification ou liste)
     private Double targetLat = null;
     private Double targetLng = null;
 
-    private List<Incident> allIncidents = new ArrayList<>();
-    private ChipGroup chipGroup;
+    // Composants UI
+    private ChipGroup chipGroupCategories;
+    private Chip chipStatusToggle;
     private SearchView searchView;
     private FloatingActionButton fabLocation;
 
@@ -65,10 +73,8 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         if (getArguments() != null) {
-            if (getArguments().containsKey("focus_lat")) {
-                targetLat = getArguments().getDouble("focus_lat");
-                targetLng = getArguments().getDouble("focus_lng");
-            }
+            targetLat = getArguments().containsKey("focus_lat") ? getArguments().getDouble("focus_lat") : null;
+            targetLng = getArguments().containsKey("focus_lng") ? getArguments().getDouble("focus_lng") : null;
         }
         return inflater.inflate(R.layout.fragment_map, container, false);
     }
@@ -80,13 +86,13 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         firestoreRepo = new FirestoreRepository();
         locationHelper = new LocationHelper(requireContext());
 
-        chipGroup = view.findViewById(R.id.chip_group_filters);
+        chipGroupCategories = view.findViewById(R.id.chip_group_filters);
+        chipStatusToggle = view.findViewById(R.id.chip_filter_status);
         searchView = view.findViewById(R.id.map_search_view);
         fabLocation = view.findViewById(R.id.fab_my_location);
 
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager()
                 .findFragmentById(R.id.map_fragment_view);
-
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
@@ -94,7 +100,38 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         setupListeners();
     }
 
+    /**
+     * Configure les interactions : Filtres combinés, Recherche et GPS.
+     */
     private void setupListeners() {
+        // 1. Filtrage par Statut (Single Chip Toggle)
+        if (chipStatusToggle != null) {
+            chipStatusToggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                isShowingTraite = isChecked;
+                chipStatusToggle.setText(isShowingTraite ? "Traité" : "Nouveau");
+
+                // Indication visuelle de l'icône selon l'état
+                int iconRes = isShowingTraite ? android.R.drawable.checkbox_on_background : android.R.drawable.ic_menu_info_details;
+                chipStatusToggle.setChipIcon(ContextCompat.getDrawable(requireContext(), iconRes));
+
+                applyCombinedFilters();
+            });
+        }
+
+        // 2. Filtrage par Catégorie (ChipGroup)
+        if (chipGroupCategories != null) {
+            chipGroupCategories.setOnCheckedChangeListener((group, checkedId) -> {
+                if (checkedId == R.id.chip_all) selectedCategory = "Tous";
+                else if (checkedId == R.id.chip_accident) selectedCategory = "Accident";
+                else if (checkedId == R.id.chip_vol) selectedCategory = "Vol";
+                else if (checkedId == R.id.chip_incendie) selectedCategory = "Incendie";
+                else if (checkedId == R.id.chip_panne) selectedCategory = "Panne";
+                else if (checkedId == R.id.chip_autre) selectedCategory = "Autre";
+
+                applyCombinedFilters();
+            });
+        }
+
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
@@ -106,77 +143,17 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         });
 
         fabLocation.setOnClickListener(v -> moveToCurrentLocation());
-
-        chipGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.chip_all) updateMapMarkers(allIncidents);
-            else if (checkedId == R.id.chip_accident) filterMarkers("Accident");
-            else if (checkedId == R.id.chip_vol) filterMarkers("Vol");
-            else if (checkedId == R.id.chip_incendie) filterMarkers("Incendie");
-            else if (checkedId == R.id.chip_panne) filterMarkers("Panne");
-            else if (checkedId == R.id.chip_autre) filterMarkers("Autre");
-        });
-    }
-
-    private void searchLocation(String locationName) {
-        if (locationName == null || locationName.isEmpty()) return;
-
-        AppExecutors.getInstance().networkIO().execute(() -> {
-            Geocoder geocoder = new Geocoder(getContext(), Locale.getDefault());
-            try {
-                List<Address> addressList = geocoder.getFromLocationName(locationName, 3);
-
-                AppExecutors.getInstance().mainThread().execute(() -> {
-                    if (addressList != null && !addressList.isEmpty()) {
-                        Address address = addressList.get(0);
-                        LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
-
-                        if (googleMap != null && isAdded()) {
-                            googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15));
-                            searchView.clearFocus();
-                        }
-                    } else {
-                        if (isAdded()) {
-                            Toast.makeText(getContext(), "Lieu introuvable : " + locationName, Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-            } catch (IOException e) {
-                AppExecutors.getInstance().mainThread().execute(() -> {
-                    if (isAdded()) {
-                        Toast.makeText(getContext(), "Service de recherche indisponible", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        });
-    }
-
-    private void moveToCurrentLocation() {
-        locationHelper.startLocationUpdates(new LocationHelper.LocationListener() {
-            @Override
-            public void onLocationReceived(Location location) {
-                if (location != null && googleMap != null) {
-                    LatLng current = new LatLng(location.getLatitude(), location.getLongitude());
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(current, 15));
-                }
-            }
-            @Override
-            public void onLocationError(String message) {
-                if (isAdded()) Toast.makeText(getContext(), "Erreur GPS : " + message, Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 
     @Override
     public void onMapReady(@NonNull GoogleMap map) {
         this.googleMap = map;
-        this.googleMap.setPadding(0, 180, 0, 0);
+        this.googleMap.setPadding(0, 200, 0, 0);
 
         if (targetLat != null && targetLng != null) {
-            LatLng target = new LatLng(targetLat, targetLng);
-            this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 16));
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(targetLat, targetLng), 16));
         } else {
-            LatLng defaultPos = new LatLng(34.6814, -1.9076);
-            this.googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultPos, 12));
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(34.6814, -1.9076), 12));
         }
 
         googleMap.getUiSettings().setZoomControlsEnabled(false);
@@ -196,7 +173,51 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Affiche le détail de l'incident avec synchronisation temps réel.
+     * Applique les filtres de Statut ET de Catégorie simultanément.
+     */
+    private void applyCombinedFilters() {
+        if (allIncidents == null || clusterManager == null) return;
+
+        List<Incident> filteredList = new ArrayList<>();
+        String targetStatus = isShowingTraite ? Incident.STATUT_TRAITE : Incident.STATUT_NOUVEAU;
+
+        for (Incident inc : allIncidents) {
+            // Vérification du Statut
+            boolean statusMatches = inc.getStatut() != null && inc.getStatut().equalsIgnoreCase(targetStatus);
+
+            // Vérification de la Catégorie
+            boolean categoryMatches = selectedCategory.equals("Tous") ||
+                    (inc.getNomCategorie() != null && inc.getNomCategorie().equalsIgnoreCase(selectedCategory));
+
+            if (statusMatches && categoryMatches) {
+                if (Math.abs(inc.getLatitude()) > 0.001) {
+                    filteredList.add(inc);
+                }
+            }
+        }
+
+        clusterManager.clearItems();
+        clusterManager.addItems(filteredList);
+        clusterManager.cluster();
+    }
+
+    private void loadIncidentMarkers() {
+        firestoreRepo.getIncidentsRealtime(new FirestoreRepository.OnDataLoadListener() {
+            @Override
+            public void onIncidentsLoaded(List<Incident> incidents) {
+                if (!isAdded()) return;
+                allIncidents = incidents;
+                applyCombinedFilters();
+            }
+            @Override
+            public void onError(Exception e) {
+                if (isAdded()) Toast.makeText(getContext(), "Erreur de synchronisation", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * Affiche la BottomSheet avec correction de l'affichage média et synchronisation temps réel.
      */
     private void showIncidentBottomSheet(Incident incident) {
         if (getContext() == null) return;
@@ -205,6 +226,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         View view = LayoutInflater.from(getContext()).inflate(R.layout.layout_map_bottom_sheet, null);
         dialog.setContentView(view);
 
+        // Liaison Composants
         ImageView imgProfile = view.findViewById(R.id.sheet_img_profile);
         TextView tvUsername = view.findViewById(R.id.sheet_tv_username);
         TextView tvCategory = view.findViewById(R.id.sheet_tv_category);
@@ -212,24 +234,38 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         TextView tvDescription = view.findViewById(R.id.sheet_tv_description);
         ImageView imgIncident = view.findViewById(R.id.sheet_img_incident);
         View cardMedia = view.findViewById(R.id.card_incident_media);
-
-        // Liaison avec les composants du layout XML
         ImageView imgHeart = view.findViewById(R.id.sheet_img_heart);
         TextView tvLikes = view.findViewById(R.id.sheet_tv_likes);
         TextView tvComments = view.findViewById(R.id.sheet_tv_comments);
 
-        if (tvUsername != null) tvUsername.setText(incident.getNomUtilisateur());
-        if (tvCategory != null) tvCategory.setText("🚨 " + incident.getNomCategorie());
-        if (tvDescription != null) tvDescription.setText(incident.getDescription());
+        // Données initiales
+        tvUsername.setText(incident.getNomUtilisateur());
+        tvCategory.setText("🚨 " + incident.getNomCategorie());
+        tvDescription.setText(incident.getDescription());
+        tvStatus.setText(incident.getStatut());
 
-        if (tvStatus != null) {
-            tvStatus.setText(incident.getStatut());
-            if ("Traité".equalsIgnoreCase(incident.getStatut())) {
-                tvStatus.setBackgroundResource(R.drawable.status_traite_bg);
-            }
+        if (Incident.STATUT_TRAITE.equalsIgnoreCase(incident.getStatut())) {
+            tvStatus.setBackgroundResource(R.drawable.status_traite_bg);
         }
 
-        // --- GESTION TEMPS RÉEL DU LIKE ET DES COMPTEURS ---
+        // --- GESTION DES MÉDIAS (CORRIGÉE) ---
+        if (incident.getPhotoUrl() != null && !incident.getPhotoUrl().isEmpty()) {
+            if (cardMedia != null) cardMedia.setVisibility(View.VISIBLE);
+            if (imgIncident != null) {
+                imgIncident.setVisibility(View.VISIBLE); // S'assurer que l'image est visible
+                Glide.with(this)
+                        .load(incident.getPhotoUrl())
+                        .placeholder(R.drawable.ic_incident_placeholder)
+                        .into(imgIncident);
+            }
+        } else {
+            if (cardMedia != null) cardMedia.setVisibility(View.GONE);
+        }
+
+        Glide.with(this).load(incident.getAuteurPhotoUrl()).circleCrop()
+                .placeholder(R.drawable.ic_profile).into(imgProfile);
+
+        // --- ECOUTEUR TEMPS RÉEL (Likes/Comments/Heart) ---
         ListenerRegistration sheetListener = firestoreRepo.getIncidentListener(incident.getId(), new FirestoreRepository.OnIncidentLoadedListener() {
             @Override
             public void onIncidentLoaded(Incident updatedIncident) {
@@ -237,60 +273,32 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
                     String myUid = FirebaseAuth.getInstance().getUid();
                     boolean isLikedByMe = updatedIncident.isLikedBy(myUid);
 
-                    // Mise à jour visuelle de la couleur du cœur
+                    // Couleur du cœur
                     if (imgHeart != null) {
                         int heartColor = isLikedByMe ? android.R.color.holo_red_dark : android.R.color.black;
                         imgHeart.setColorFilter(ContextCompat.getColor(requireContext(), heartColor));
                     }
-
-                    // Mise à jour des compteurs texte
-                    if (tvLikes != null) {
-                        tvLikes.setText(updatedIncident.getLikesCount() + " J'aime");
-                    }
-                    if (tvComments != null) {
-                        tvComments.setText(updatedIncident.getCommentsCount() + " comm.");
-                    }
+                    // Compteurs
+                    if (tvLikes != null) tvLikes.setText(updatedIncident.getLikesCount() + " J'aime");
+                    if (tvComments != null) tvComments.setText(updatedIncident.getCommentsCount() + " comm.");
                 }
             }
-
-            @Override
-            public void onError(Exception e) {}
+            @Override public void onError(Exception e) {}
         });
 
-        // Action de clic sur l'icône du cœur
+        // Action Like
         if (imgHeart != null) {
             imgHeart.setOnClickListener(v -> {
                 String myUid = FirebaseAuth.getInstance().getUid();
-                if (myUid != null) {
-                    firestoreRepo.toggleLike(incident.getId(), myUid);
-                }
+                if (myUid != null) firestoreRepo.toggleLike(incident.getId(), myUid);
             });
         }
 
-        if (imgProfile != null) {
-            Glide.with(this)
-                    .load(incident.getAuteurPhotoUrl())
-                    .circleCrop()
-                    .placeholder(R.drawable.ic_profile)
-                    .into(imgProfile);
-        }
-
-        if (imgIncident != null && cardMedia != null) {
-            if (incident.hasMedia()) {
-                cardMedia.setVisibility(View.VISIBLE);
-                imgIncident.setVisibility(View.VISIBLE);
-                Glide.with(this).load(incident.getPhotoUrl()).into(imgIncident);
-            } else {
-                cardMedia.setVisibility(View.GONE);
-                imgIncident.setVisibility(View.GONE);
-            }
-        }
-
+        // Action Commentaires
         if (tvComments != null) {
             tvComments.setOnClickListener(v -> {
                 dialog.dismiss();
-                CommentFragment.newInstance(incident.getId())
-                        .show(getParentFragmentManager(), "CommentBottomSheet");
+                CommentFragment.newInstance(incident.getId()).show(getParentFragmentManager(), "CommentBottomSheet");
             });
         }
 
@@ -301,41 +309,36 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         dialog.show();
     }
 
-    private void loadIncidentMarkers() {
-        firestoreRepo.getIncidentsRealtime(new FirestoreRepository.OnDataLoadListener() {
-            @Override
-            public void onIncidentsLoaded(List<Incident> incidents) {
-                if (!isAdded()) return;
-                allIncidents = incidents;
-                updateMapMarkers(allIncidents);
-            }
-            @Override
-            public void onError(Exception e) {}
+    private void searchLocation(String locationName) {
+        if (locationName == null || locationName.isEmpty()) return;
+        AppExecutors.getInstance().networkIO().execute(() -> {
+            Geocoder geocoder = new Geocoder(getContext(), Locale.getDefault());
+            try {
+                List<Address> addressList = geocoder.getFromLocationName(locationName, 1);
+                AppExecutors.getInstance().mainThread().execute(() -> {
+                    if (addressList != null && !addressList.isEmpty() && isAdded()) {
+                        LatLng latLng = new LatLng(addressList.get(0).getLatitude(), addressList.get(0).getLongitude());
+                        googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15));
+                        searchView.clearFocus();
+                    }
+                });
+            } catch (IOException ignored) {}
         });
     }
 
-    private void filterMarkers(String categoryName) {
-        List<Incident> filteredList = new ArrayList<>();
-        for (Incident inc : allIncidents) {
-            if (inc.getNomCategorie() != null && inc.getNomCategorie().equalsIgnoreCase(categoryName)) {
-                filteredList.add(inc);
-            }
-        }
-        updateMapMarkers(filteredList);
-    }
-
-    private void updateMapMarkers(List<Incident> incidentsToDisplay) {
-        if (googleMap == null || clusterManager == null) return;
-        clusterManager.clearItems();
-
-        for (Incident inc : incidentsToDisplay) {
-            if (inc.getStatut() != null && !inc.getStatut().equalsIgnoreCase("Traité")) {
-                if (Math.abs(inc.getLatitude()) > 0.001) {
-                    clusterManager.addItem(inc);
+    private void moveToCurrentLocation() {
+        locationHelper.startLocationUpdates(new LocationHelper.LocationListener() {
+            @Override
+            public void onLocationReceived(Location location) {
+                if (location != null && googleMap != null) {
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            new LatLng(location.getLatitude(), location.getLongitude()), 15));
                 }
             }
-        }
-        clusterManager.cluster();
+            @Override public void onLocationError(String message) {
+                if (isAdded()) Toast.makeText(getContext(), "GPS : " + message, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     public void enableUserLocation() {
@@ -348,8 +351,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public void onStop() {
         super.onStop();
-        if (locationHelper != null) {
-            locationHelper.stopLocationUpdates();
-        }
+        if (locationHelper != null) locationHelper.stopLocationUpdates();
     }
 }
