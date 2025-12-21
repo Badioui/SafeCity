@@ -19,14 +19,13 @@ import java.util.List;
 
 public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotifViewHolder> {
 
-    // 1. Interface pour gérer les clics
     public interface OnNotificationClickListener {
         void onNotificationClick(NotificationApp notification);
     }
 
     private final Context context;
     private List<NotificationApp> notifList;
-    private final OnNotificationClickListener clickListener; // Listener pour les clics
+    private final OnNotificationClickListener clickListener;
 
     public NotificationAdapter(Context context, List<NotificationApp> notifList, OnNotificationClickListener listener) {
         this.context = context;
@@ -49,8 +48,6 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
     @Override
     public void onBindViewHolder(@NonNull NotifViewHolder holder, int position) {
         NotificationApp notif = notifList.get(position);
-
-        // Utilisation d'une méthode 'bind' pour plus de clarté
         holder.bind(notif, clickListener);
     }
 
@@ -75,7 +72,6 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             viewUnread = itemView.findViewById(R.id.view_unread_indicator);
         }
 
-        // Méthode pour lier les données, le style ET le clic
         public void bind(final NotificationApp notif, final OnNotificationClickListener listener) {
             tvTitle.setText(notif.getTitre());
             tvMessage.setText(notif.getMessage());
@@ -121,7 +117,6 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
 
             viewUnread.setVisibility(notif.isLu() ? View.GONE : View.VISIBLE);
 
-            // 2. Attribuer le listener de clic à la vue de l'item
             itemView.setOnClickListener(v -> {
                 if (listener != null) {
                     listener.onNotificationClick(notif);

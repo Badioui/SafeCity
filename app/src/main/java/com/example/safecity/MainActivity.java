@@ -35,7 +35,6 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.messaging.FirebaseMessaging;
 
-// 1. Implémentation de la nouvelle interface
 public class MainActivity extends AppCompatActivity implements LocationHelper.LocationListener, NotificationsFragment.NotificationNavigationListener {
 
     private BottomNavigationView bottomNav;
@@ -106,9 +105,9 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
             return;
         }
 
-        bottomNav.setOnItemSelectedListener(null); // Eviter les boucles
+        bottomNav.setOnItemSelectedListener(null);
         bottomNav.setSelectedItemId(R.id.nav_map);
-        setupBottomNav(); // Réactiver le listener
+        setupBottomNav();
 
         MapFragment mapFragment = new MapFragment();
         Bundle args = new Bundle();
@@ -136,19 +135,15 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                 .commit();
     }
     
-    // 2. Implémentation de la méthode de navigation
     @Override
     public void navigateToIncident(String incidentId) {
-        // On sélectionne l'icône Home dans la BottomNav
         bottomNav.setSelectedItemId(R.id.nav_home);
         
-        // On prépare le HomeFragment avec l'ID de l'incident
         HomeFragment homeFragment = new HomeFragment();
         Bundle args = new Bundle();
         args.putString("focus_incident_id", incidentId);
         homeFragment.setArguments(args);
 
-        // On effectue la transaction
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.nav_host_fragment, homeFragment)
                 .addToBackStack(null)
@@ -243,7 +238,6 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         if (intent.hasExtra("incidentId")) {
             String incidentId = intent.getStringExtra("incidentId");
             if (incidentId != null && !incidentId.isEmpty()) {
-                // On réutilise notre nouvelle méthode de navigation !
                 navigateToIncident(incidentId);
                 intent.removeExtra("incidentId");
                 return;

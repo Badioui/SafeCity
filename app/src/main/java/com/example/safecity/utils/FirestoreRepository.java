@@ -40,7 +40,6 @@ public class FirestoreRepository {
     public interface OnUserLoadedListener { void onUserLoaded(Utilisateur utilisateur); void onError(Exception e); }
     public interface OnCommentsLoadedListener { void onCommentsLoaded(List<Comment> comments); void onError(Exception e); }
     public interface OnRolesLoadedListener { void onRolesLoaded(List<Role> roles); void onError(Exception e); }
-    // CORRECTION : Ajout de l'interface manquante
     public interface OnCategoriesLoadedListener { void onCategoriesLoaded(List<Categorie> categories); void onError(Exception e); }
 
 

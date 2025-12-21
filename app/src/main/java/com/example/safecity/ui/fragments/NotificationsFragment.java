@@ -32,7 +32,7 @@ public class NotificationsFragment extends Fragment implements NotificationAdapt
     }
 
     private RecyclerView recyclerView;
-    private TextView tvEmptyState; // 1. Référence pour le message d'état vide
+    private TextView tvEmptyState;
     private NotificationAdapter adapter;
     private FirestoreRepository firestoreRepo;
     private ListenerRegistration notificationListener;
@@ -60,7 +60,7 @@ public class NotificationsFragment extends Fragment implements NotificationAdapt
         super.onViewCreated(view, savedInstanceState);
 
         recyclerView = view.findViewById(R.id.recycler_notifications);
-        tvEmptyState = view.findViewById(R.id.tv_empty_state_notifications); // 2. Initialisation
+        tvEmptyState = view.findViewById(R.id.tv_empty_state_notifications);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
         adapter = new NotificationAdapter(getContext(), new ArrayList<>(), this);
@@ -73,7 +73,7 @@ public class NotificationsFragment extends Fragment implements NotificationAdapt
             currentUserId = user.getUid();
         } else {
             Toast.makeText(getContext(), "Veuillez vous connecter pour voir les notifications", Toast.LENGTH_LONG).show();
-            updateEmptyState(true); // Affiche le message si l'utilisateur n'est pas connecté
+            updateEmptyState(true);
         }
     }
 
@@ -99,7 +99,6 @@ public class NotificationsFragment extends Fragment implements NotificationAdapt
             public void onNotificationsLoaded(List<NotificationApp> notifications) {
                 if (isAdded() && adapter != null) {
                     adapter.updateData(notifications);
-                    // 3. Mise à jour de l'affichage
                     updateEmptyState(notifications.isEmpty());
                 }
             }
@@ -108,13 +107,12 @@ public class NotificationsFragment extends Fragment implements NotificationAdapt
             public void onError(Exception e) {
                 if (isAdded()) {
                     Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    updateEmptyState(true); // Affiche le message en cas d'erreur
+                    updateEmptyState(true);
                 }
             }
         });
     }
 
-    // 4. Méthode pour gérer la visibilité
     private void updateEmptyState(boolean isEmpty) {
         if (isEmpty) {
             recyclerView.setVisibility(View.GONE);

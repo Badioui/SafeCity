@@ -232,22 +232,19 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
     private void showSendAlertDialog() {
         if (getContext() == null) return;
-        // 1. On "gonfle" le layout XML
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_send_alert, null);
 
-        // 2. On récupère les vues du layout
         final EditText etTitle = dialogView.findViewById(R.id.et_alert_title);
         final EditText etMessage = dialogView.findViewById(R.id.et_alert_message);
         final RadioButton rbUrgent = dialogView.findViewById(R.id.rb_urgent);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("📢 Diffuser une Alerte")
-                .setView(dialogView) // 3. On utilise le layout
-                .setPositiveButton("ENVOYER", null) // On met null pour gérer le clic manuellement
+                .setView(dialogView)
+                .setPositiveButton("ENVOYER", null)
                 .setNegativeButton("Annuler", null)
                 .create();
 
-        // 4. On ajoute la logique de validation
         dialog.setOnShowListener(d -> {
             Button positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             positiveButton.setOnClickListener(v -> {
@@ -265,7 +262,7 @@ public class HomeFragment extends Fragment implements IncidentAdapter.OnIncident
 
                 String finalTitle = rbUrgent.isChecked() ? "🚨 [URGENT] " + title : "ℹ️ " + title;
                 sendAlertToFirebase(finalTitle, message);
-                dialog.dismiss(); // On ferme la boite de dialogue seulement si tout est valide
+                dialog.dismiss();
             });
         });
 
