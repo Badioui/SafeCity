@@ -22,72 +22,54 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
-import com.example.safecity.model.Utilisateur;
 import com.example.safecity.ui.fragments.HomeFragment;
 import com.example.safecity.ui.fragments.MapFragment;
 import com.example.safecity.ui.fragments.NotificationsFragment;
 import com.example.safecity.ui.fragments.ProfileFragment;
 import com.example.safecity.ui.fragments.SignalementFragment;
-import com.example.safecity.utils.FirestoreRepository;
 import com.example.safecity.utils.LocationHelper;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.messaging.FirebaseMessaging;
 
-/**
- * Activité principale de SafeCity.
- * Correction apportée : Gestion de la navigation programmée sans conflit de fragments.
- */
-public class MainActivity extends AppCompatActivity implements LocationHelper.LocationListener {
+// 1. Implémentation de la nouvelle interface
+public class MainActivity extends AppCompatActivity implements LocationHelper.LocationListener, NotificationsFragment.NotificationNavigationListener {
 
     private BottomNavigationView bottomNav;
     private ImageButton btnSearch;
     private ExtendedFloatingActionButton btnSos;
-    private FloatingActionButton fabStats;
 
     private LocationHelper locationHelper;
-    private FirestoreRepository firestoreRepo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialisation des outils
-        firestoreRepo = new FirestoreRepository();
         locationHelper = new LocationHelper(this);
         checkPermissionsAndStartGPS();
         setupFCM();
 
-        // Liaison UI
         btnSearch = findViewById(R.id.btn_search);
         btnSos = findViewById(R.id.btn_sos);
-        fabStats = findViewById(R.id.fab_stats);
         bottomNav = findViewById(R.id.bottom_nav_bar);
 
-        // Configuration des composants
         setupFloatingButtons();
-        setupBottomNav(); // Initialisation du listener de navigation
+        setupBottomNav();
 
         btnSearch.setOnClickListener(v -> showSearchDialog());
 
-        // Chargement initial (Home) si premier lancement
         if (savedInstanceState == null) {
             bottomNav.setSelectedItemId(R.id.nav_home);
         }
 
-        checkUserRole();
+        subscribeToUserTopic();
         handleNotificationIntent(getIntent());
     }
 
-    /**
-     * Définit la logique de navigation de la barre du bas.
-     * Extraite en méthode pour pouvoir être réactivée/désactivée facilement.
-     */
     private void setupBottomNav() {
         bottomNav.setOnItemSelectedListener(item -> {
             Fragment selectedFragment = null;
@@ -118,26 +100,16 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         });
     }
 
-    /**
-     * Navigue vers la carte et centre la caméra sur des coordonnées précises.
-     * Résout le problème de "l'écran bleu" (conflit de création de fragments).
-     */
     public void navigateToMapAndFocus(double lat, double lng) {
-        // 1. Sécurité : éviter l'océan (0,0) ou les erreurs de parsing
         if (lat == 0 && lng == 0) {
             Toast.makeText(this, "Coordonnées invalides", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // 2. Désactiver temporairement le listener pour éviter que setSelectedItemId
-        // ne déclenche la création d'un MapFragment standard sans arguments.
-        bottomNav.setOnItemSelectedListener(null);
+        bottomNav.setOnItemSelectedListener(null); // Eviter les boucles
         bottomNav.setSelectedItemId(R.id.nav_map);
+        setupBottomNav(); // Réactiver le listener
 
-        // 3. Réactiver le listener pour les futurs clics manuels de l'utilisateur
-        setupBottomNav();
-
-        // 4. Créer manuellement le fragment avec les arguments de focus
         MapFragment mapFragment = new MapFragment();
         Bundle args = new Bundle();
         args.putDouble("focus_lat", lat);
@@ -149,11 +121,7 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                 .commit();
     }
 
-    /**
-     * Recherche filtrée (transfère la requête au HomeFragment).
-     */
     private void performSearch(String query) {
-        // On change visuellement l'onglet vers Home sans recréer le fragment via le listener
         bottomNav.setOnItemSelectedListener(null);
         bottomNav.setSelectedItemId(R.id.nav_home);
         setupBottomNav();
@@ -165,6 +133,25 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
 
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.nav_host_fragment, homeFragment)
+                .commit();
+    }
+    
+    // 2. Implémentation de la méthode de navigation
+    @Override
+    public void navigateToIncident(String incidentId) {
+        // On sélectionne l'icône Home dans la BottomNav
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        
+        // On prépare le HomeFragment avec l'ID de l'incident
+        HomeFragment homeFragment = new HomeFragment();
+        Bundle args = new Bundle();
+        args.putString("focus_incident_id", incidentId);
+        homeFragment.setArguments(args);
+
+        // On effectue la transaction
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.nav_host_fragment, homeFragment)
+                .addToBackStack(null)
                 .commit();
     }
 
@@ -189,33 +176,21 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                 return true;
             });
         }
-
-        if (fabStats != null) {
-            fabStats.setOnClickListener(v ->
-                    Toast.makeText(this, "Accès au tableau de bord Admin", Toast.LENGTH_SHORT).show());
-        }
     }
 
-    private void checkUserRole() {
+    private void subscribeToUserTopic() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        if (user != null && fabStats != null) {
-            firestoreRepo.getUser(user.getUid(), new FirestoreRepository.OnUserLoadedListener() {
-                @Override
-                public void onUserLoaded(Utilisateur utilisateur) {
-                    if (utilisateur != null && isRoleAuthorized(utilisateur.getIdRole())) {
-                        fabStats.setVisibility(android.view.View.VISIBLE);
-                    }
-                }
-                @Override
-                public void onError(Exception e) {
-                    Log.e("MainActivity", "Erreur rôle: " + e.getMessage());
-                }
-            });
+        if (user != null) {
+            String userTopic = "user_" + user.getUid();
+            FirebaseMessaging.getInstance().subscribeToTopic(userTopic)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            Log.d("FCM", "Subscribed to " + userTopic);
+                        } else {
+                            Log.e("FCM", "Failed to subscribe to " + userTopic);
+                        }
+                    });
         }
-    }
-
-    private boolean isRoleAuthorized(String role) {
-        return "admin".equalsIgnoreCase(role) || "autorite".equalsIgnoreCase(role);
     }
 
     private void lancerAppelUrgence() {
@@ -238,7 +213,7 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
         input.setLayoutParams(params);
         container.addView(input);
 
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle("Rechercher")
                 .setMessage("Filtrez les signalements par mot-clé.")
                 .setView(container)
@@ -247,19 +222,7 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
                     if (!query.isEmpty()) performSearch(query);
                 })
                 .setNegativeButton("Annuler", null)
-                .create();
-
-        input.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                String query = input.getText().toString().trim();
-                if (!query.isEmpty()) performSearch(query);
-                dialog.dismiss();
-                return true;
-            }
-            return false;
-        });
-
-        dialog.show();
+                .show();
     }
 
     private void redirectToLogin() {
@@ -275,13 +238,27 @@ public class MainActivity extends AppCompatActivity implements LocationHelper.Lo
     }
 
     private void handleNotificationIntent(Intent intent) {
-        if (intent != null && intent.hasExtra("lat") && intent.hasExtra("lng")) {
+        if (intent == null) return;
+
+        if (intent.hasExtra("incidentId")) {
+            String incidentId = intent.getStringExtra("incidentId");
+            if (incidentId != null && !incidentId.isEmpty()) {
+                // On réutilise notre nouvelle méthode de navigation !
+                navigateToIncident(incidentId);
+                intent.removeExtra("incidentId");
+                return;
+            }
+        }
+
+        if (intent.hasExtra("lat") && intent.hasExtra("lng")) {
             try {
                 double lat = Double.parseDouble(intent.getStringExtra("lat"));
                 double lng = Double.parseDouble(intent.getStringExtra("lng"));
                 navigateToMapAndFocus(lat, lng);
+                intent.removeExtra("lat");
+                intent.removeExtra("lng");
             } catch (Exception e) {
-                Log.e("MainActivity", "Erreur coordonnées notification");
+                Log.e("MainActivity", "Erreur coordonnées notification pour la carte");
             }
         }
     }

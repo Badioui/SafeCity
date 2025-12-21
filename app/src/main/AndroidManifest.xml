@@ -19,13 +19,14 @@
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
+        android.fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/safecity_logo"
         android:roundIcon="@drawable/safecity_logo"
 
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.SafeCity"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
 
         <!-- 2. ACTIVITÉS -->
@@ -62,6 +63,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- ICÔNE ET COULEUR PAR DÉFAUT POUR LES NOTIFICATIONS -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/safecity_logo" />
 
         <!-- 4. CLÉ API GOOGLE MAPS -->
         <meta-data

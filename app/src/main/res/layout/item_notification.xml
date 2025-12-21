@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:padding="16dp">
 
-        <!-- Conteneur circulaire pour l'icône -->
+        <!-- Conteneur circulaire pour l'icône (Type de notification) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_icon_container"
             android:layout_width="48dp"
@@ -33,7 +33,7 @@
                 android:layout_width="24dp"
                 android:layout_height="24dp"
                 android:layout_gravity="center"
-                android:src="@drawable/ic_info"
+                android:src="@drawable/ic_notifications"
                 app:tint="?attr/colorPrimary"
                 android:contentDescription="Icône notification" />
         </com.google.android.material.card.MaterialCardView>
@@ -51,7 +51,7 @@
             app:layout_constraintEnd_toStartOf="@+id/view_unread_indicator"
             app:layout_constraintStart_toEndOf="@id/card_icon_container"
             app:layout_constraintTop_toTopOf="@id/card_icon_container"
-            tools:text="Alerte Officielle : Tempête" />
+            tools:text="Nouveau Commentaire" />
 
         <!-- Message de la notification -->
         <TextView
@@ -65,9 +65,9 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@id/tv_notif_title"
             app:layout_constraintTop_toBottomOf="@id/tv_notif_title"
-            tools:text="Une tempête est prévue pour ce soir. Veuillez rester à l'abri et sécuriser vos biens." />
+            tools:text="Ahmed a commenté votre signalement (Accident)." />
 
-        <!-- Date de la notification -->
+        <!-- Date de la notification (Relative) -->
         <TextView
             android:id="@+id/tv_notif_date"
             android:layout_width="wrap_content"

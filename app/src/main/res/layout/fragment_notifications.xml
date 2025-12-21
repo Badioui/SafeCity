@@ -1,21 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:background="#FAFAFA">
 
+    <!-- En-tête de la page -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Activité &amp; Notifications"
-        android:textSize="22sp"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:padding="16dp"
+        android:paddingStart="24dp"
+        android:paddingTop="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="16dp"
         android:textColor="@color/black"/>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler_notifications"
+    <!-- Conteneur qui permet de superposer la liste et le message d'état vide -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent">
+
+        <!-- Liste des notifications -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_notifications"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="8dp"
+            android:paddingBottom="80dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
+
+        <!-- Message pour l'état "vide" -->
+        <TextView
+            android:id="@+id/tv_empty_state_notifications"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Vous n'avez aucune notification."
+            android:textSize="16sp"
+            android:textColor="#888888"
+            android:drawableTop="@drawable/ic_notifications"
+            android:drawablePadding="16dp"
+            android:gravity="center"
+            android:visibility="gone" /> <!-- Invisible par défaut -->
+
+    </FrameLayout>
+
 </LinearLayout>

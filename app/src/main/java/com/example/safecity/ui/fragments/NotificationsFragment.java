@@ -1,9 +1,11 @@
 package com.example.safecity.ui.fragments;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -16,15 +18,36 @@ import com.example.safecity.R;
 import com.example.safecity.model.NotificationApp;
 import com.example.safecity.ui.adapters.NotificationAdapter;
 import com.example.safecity.utils.FirestoreRepository;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class NotificationsFragment extends Fragment {
+public class NotificationsFragment extends Fragment implements NotificationAdapter.OnNotificationClickListener {
+
+    public interface NotificationNavigationListener {
+        void navigateToIncident(String incidentId);
+    }
 
     private RecyclerView recyclerView;
+    private TextView tvEmptyState; // 1. Référence pour le message d'état vide
     private NotificationAdapter adapter;
     private FirestoreRepository firestoreRepo;
+    private ListenerRegistration notificationListener;
+    private String currentUserId;
+    private NotificationNavigationListener navigationListener;
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        if (context instanceof NotificationNavigationListener) {
+            navigationListener = (NotificationNavigationListener) context;
+        } else {
+            throw new RuntimeException(context.toString() + " must implement NotificationNavigationListener");
+        }
+    }
 
     @Nullable
     @Override
@@ -37,31 +60,47 @@ public class NotificationsFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         recyclerView = view.findViewById(R.id.recycler_notifications);
+        tvEmptyState = view.findViewById(R.id.tv_empty_state_notifications); // 2. Initialisation
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // 1. Initialisation avec une liste vide pour éviter les erreurs avant le chargement
-        adapter = new NotificationAdapter(getContext(), new ArrayList<>());
+        adapter = new NotificationAdapter(getContext(), new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
 
-        // 2. Initialisation du repository
         firestoreRepo = new FirestoreRepository();
 
-        // 3. Chargement des données réelles depuis Firestore
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null) {
+            currentUserId = user.getUid();
+        } else {
+            Toast.makeText(getContext(), "Veuillez vous connecter pour voir les notifications", Toast.LENGTH_LONG).show();
+            updateEmptyState(true); // Affiche le message si l'utilisateur n'est pas connecté
+        }
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
         loadNotifications();
     }
 
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (notificationListener != null) {
+            notificationListener.remove();
+        }
+    }
+
     private void loadNotifications() {
-        firestoreRepo.getNotifications(new FirestoreRepository.OnNotificationsLoadedListener() {
+        if (currentUserId == null) return;
+
+        notificationListener = firestoreRepo.getNotifications(currentUserId, new FirestoreRepository.OnNotificationsLoadedListener() {
             @Override
             public void onNotificationsLoaded(List<NotificationApp> notifications) {
-                // On vérifie que le fragment est toujours actif avant de toucher à l'UI
                 if (isAdded() && adapter != null) {
-                    // Mise à jour de l'adaptateur via la méthode créée à l'étape 1
                     adapter.updateData(notifications);
-
-                    if (notifications.isEmpty()) {
-                        Toast.makeText(getContext(), "Aucune notification pour le moment", Toast.LENGTH_SHORT).show();
-                    }
+                    // 3. Mise à jour de l'affichage
+                    updateEmptyState(notifications.isEmpty());
                 }
             }
 
@@ -69,8 +108,37 @@ public class NotificationsFragment extends Fragment {
             public void onError(Exception e) {
                 if (isAdded()) {
                     Toast.makeText(getContext(), "Erreur chargement : " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    updateEmptyState(true); // Affiche le message en cas d'erreur
                 }
             }
         });
+    }
+
+    // 4. Méthode pour gérer la visibilité
+    private void updateEmptyState(boolean isEmpty) {
+        if (isEmpty) {
+            recyclerView.setVisibility(View.GONE);
+            tvEmptyState.setVisibility(View.VISIBLE);
+        } else {
+            recyclerView.setVisibility(View.VISIBLE);
+            tvEmptyState.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public void onNotificationClick(NotificationApp notification) {
+        if (notification.getIdIncidentSource() != null && !notification.getIdIncidentSource().isEmpty()) {
+            if (navigationListener != null) {
+                navigationListener.navigateToIncident(notification.getIdIncidentSource());
+            }
+        } else {
+            Toast.makeText(getContext(), "Cette notification n'est pas liée à un incident.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        navigationListener = null;
     }
 }

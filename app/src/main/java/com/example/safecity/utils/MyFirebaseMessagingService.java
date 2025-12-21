@@ -35,6 +35,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         if (remoteMessage.getData().size() > 0) {
             String latStr = remoteMessage.getData().get("lat");
             String lngStr = remoteMessage.getData().get("lng");
+            String incidentId = remoteMessage.getData().get("idIncidentSource");
 
             // On récupère le titre et le corps.
             // Si le serveur les met dans 'notification', on les prend de là.
@@ -52,7 +53,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                     // Vérification de la distance (5km pour le test, 500m en réel)
                     if (isIncidentClose(lat, lng)) {
                         // IMPORTANT : On passe latStr et lngStr à la méthode sendNotification
-                        sendNotification(title, body, latStr, lngStr);
+                        sendNotification(title, body, latStr, lngStr, incidentId);
                     } else {
                         Log.d(TAG, "Incident ignoré car trop loin.");
                     }
@@ -61,7 +62,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 }
             } else {
                 // Pas de GPS dans le message ? Notification simple
-                sendNotification(title, body, null, null);
+                sendNotification(title, body, null, null, incidentId);
             }
         }
         // 2. GESTION NOTIFICATION SIMPLE (Sans data GPS)
@@ -69,7 +70,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             sendNotification(
                     remoteMessage.getNotification().getTitle(),
                     remoteMessage.getNotification().getBody(),
-                    null, null
+                    null, null, null
             );
         }
     }
@@ -100,18 +101,22 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     // --- MÉTHODE MISE À JOUR ---
-    private void sendNotification(String title, String messageBody, String lat, String lng) {
+    private void sendNotification(String title, String messageBody, String lat, String lng, String incidentId) {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         // C'EST ICI LA CLÉ DU SYSTÈME :
-        // On attache les coordonnées à l'intent.
+        // On attache les coordonnées et l'ID de l'incident à l'intent.
         // Quand MainActivity s'ouvrira, elle lira ces valeurs.
         if (lat != null && lng != null) {
             intent.putExtra("lat", lat);
             intent.putExtra("lng", lng);
             // On ajoute l'action pour correspondre au filtre du Manifest
             intent.setAction("MainActivity");
+        }
+
+        if (incidentId != null && !incidentId.isEmpty()) {
+            intent.putExtra("incidentId", incidentId);
         }
 
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent,

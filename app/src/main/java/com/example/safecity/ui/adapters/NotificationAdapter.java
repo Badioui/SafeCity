@@ -10,7 +10,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.safecity.R;
@@ -18,18 +17,21 @@ import com.example.safecity.model.NotificationApp;
 
 import java.util.List;
 
-/**
- * Adaptateur pour les notifications.
- * Gère les différents types (alerte, validation, message) avec des couleurs distinctes.
- */
 public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotifViewHolder> {
+
+    // 1. Interface pour gérer les clics
+    public interface OnNotificationClickListener {
+        void onNotificationClick(NotificationApp notification);
+    }
 
     private final Context context;
     private List<NotificationApp> notifList;
+    private final OnNotificationClickListener clickListener; // Listener pour les clics
 
-    public NotificationAdapter(Context context, List<NotificationApp> notifList) {
+    public NotificationAdapter(Context context, List<NotificationApp> notifList, OnNotificationClickListener listener) {
         this.context = context;
         this.notifList = notifList;
+        this.clickListener = listener;
     }
 
     public void updateData(List<NotificationApp> newList) {
@@ -48,35 +50,8 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
     public void onBindViewHolder(@NonNull NotifViewHolder holder, int position) {
         NotificationApp notif = notifList.get(position);
 
-        holder.tvTitle.setText(notif.getTitre());
-        holder.tvMessage.setText(notif.getMessage());
-
-        // Date relative
-        if (notif.getDate() != null) {
-            CharSequence time = DateUtils.getRelativeTimeSpanString(
-                    notif.getDate().getTime(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS);
-            holder.tvDate.setText(time);
-        }
-
-        // --- LOGIQUE PREMIUM : Personnalisation par type ---
-        String type = notif.getType() != null ? notif.getType().toLowerCase() : "default";
-
-        if (type.contains("alerte")) {
-            holder.imgIcon.setImageResource(R.drawable.ic_info);
-            holder.cardIconContainer.setCardBackgroundColor(Color.parseColor("#FFF1F0")); // Rouge très clair
-            holder.imgIcon.setColorFilter(Color.parseColor("#F44336")); // Rouge
-        } else if (type.contains("validation") || type.contains("traité")) {
-            holder.imgIcon.setImageResource(R.drawable.ic_check);
-            holder.cardIconContainer.setCardBackgroundColor(Color.parseColor("#F6FFED")); // Vert très clair
-            holder.imgIcon.setColorFilter(Color.parseColor("#52C41A")); // Vert
-        } else {
-            holder.imgIcon.setImageResource(R.drawable.ic_notifications);
-            holder.cardIconContainer.setCardBackgroundColor(Color.parseColor("#F0F7FF")); // Bleu très clair
-            holder.imgIcon.setColorFilter(ContextCompat.getColor(context, R.color.colorPrimary));
-        }
-
-        // Gestion de l'indicateur de non-lu (si ton modèle NotificationApp a un champ isRead)
-        // holder.viewUnread.setVisibility(notif.isRead() ? View.GONE : View.VISIBLE);
+        // Utilisation d'une méthode 'bind' pour plus de clarté
+        holder.bind(notif, clickListener);
     }
 
     @Override
@@ -98,6 +73,60 @@ public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapte
             imgIcon = itemView.findViewById(R.id.img_notif_icon);
             cardIconContainer = itemView.findViewById(R.id.card_icon_container);
             viewUnread = itemView.findViewById(R.id.view_unread_indicator);
+        }
+
+        // Méthode pour lier les données, le style ET le clic
+        public void bind(final NotificationApp notif, final OnNotificationClickListener listener) {
+            tvTitle.setText(notif.getTitre());
+            tvMessage.setText(notif.getMessage());
+
+            if (notif.getDate() != null) {
+                CharSequence time = DateUtils.getRelativeTimeSpanString(
+                        notif.getDate().getTime(),
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS);
+                tvDate.setText(time);
+            }
+
+            String type = notif.getType() != null ? notif.getType().toLowerCase() : "default";
+            switch (type) {
+                case "like":
+                    imgIcon.setImageResource(R.drawable.ic_heart);
+                    cardIconContainer.setCardBackgroundColor(Color.parseColor("#FFF0F6"));
+                    imgIcon.setColorFilter(Color.parseColor("#FF4D4F"));
+                    break;
+                case "comment":
+                    imgIcon.setImageResource(R.drawable.ic_send);
+                    cardIconContainer.setCardBackgroundColor(Color.parseColor("#E6F7FF"));
+                    imgIcon.setColorFilter(Color.parseColor("#1890FF"));
+                    break;
+                case "alerte":
+                case "alerte_officielle":
+                    imgIcon.setImageResource(R.drawable.ic_info);
+                    cardIconContainer.setCardBackgroundColor(Color.parseColor("#FFF1F0"));
+                    imgIcon.setColorFilter(Color.parseColor("#F5222D"));
+                    break;
+                case "validation":
+                case "traité":
+                    imgIcon.setImageResource(R.drawable.ic_check);
+                    cardIconContainer.setCardBackgroundColor(Color.parseColor("#F6FFED"));
+                    imgIcon.setColorFilter(Color.parseColor("#52C41A"));
+                    break;
+                default:
+                    imgIcon.setImageResource(R.drawable.ic_notifications);
+                    cardIconContainer.setCardBackgroundColor(Color.parseColor("#F5F5F5"));
+                    imgIcon.setColorFilter(Color.parseColor("#8C8C8C"));
+                    break;
+            }
+
+            viewUnread.setVisibility(notif.isLu() ? View.GONE : View.VISIBLE);
+
+            // 2. Attribuer le listener de clic à la vue de l'item
+            itemView.setOnClickListener(v -> {
+                if (listener != null) {
+                    listener.onNotificationClick(notif);
+                }
+            });
         }
     }
 }
